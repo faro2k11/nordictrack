@@ -122,12 +122,13 @@
   .stepper .val .big { font-size: 30px; font-weight: 700; color: var(--ink); line-height: 1; }
   .stepper .val .unit { font-size: 10px; color: var(--ink-dim); margin-top: 3px; letter-spacing: .1em; }
 
-  input[type=text], input[type=number] {
+  input[type=text], input[type=number], textarea {
     font-family: inherit; font-size: 13px;
     background: #0a0b07; color: var(--ink);
     border: 1px solid var(--line); padding: 9px 10px; width: 100%;
   }
-  input:focus { outline: none; border-color: var(--amber-dk); }
+  textarea { resize: vertical; line-height: 1.5; }
+  input:focus, textarea:focus { outline: none; border-color: var(--amber-dk); }
 
   .mini { font-size: 11px; color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
   .mini b { color: var(--ink); font-weight: 600; }
@@ -224,9 +225,25 @@
     </div>
 
     <div class="mini">
-      Sollwerte werden in die Poll-Schleife eingereiht und im Takt an die Konsole
-      gesendet (wie in QZ). <b>Speed</b> 0–16 km/h · <b>Incline</b> 0–10 %.
-      Einheit ggf. am Laufband-Display kalibrieren.
+      Sollwerte laufen über die Poll-Schleife (wie in QZ). <b>Speed</b> 1–16 km/h
+      — unter 1 km/h gibt es keine Laufgeschwindigkeit, ein Schritt nach unten löst
+      darum <b>Stop</b> aus · <b>Incline</b> 0–10 %.
+    </div>
+  </div>
+</div>
+
+<!-- STOP-SEQUENZ -->
+<div class="panel">
+  <div class="panel-h">2b · Stop-Sequenz</div>
+  <div class="panel-b">
+    <label class="fld">Frames für den Stop-Knopf — ein Hex-Frame pro Zeile</label>
+    <textarea id="stopSeq" rows="3">fe 02 0f 02
+ff 0f 02 04 02 0b 04 0b 02 02 02 10 00 00 01 00 26 00 00 00</textarea>
+    <div class="mini">
+      Voreinstellung: Stop-Sequenz aus dem QZ-Profil <b>proform_treadmill_9_0</b>.
+      Das t65s-Profil selbst kennt keinen echten Stop (QZ nutzt dort Speed→0, das
+      deine Firmware ignoriert). Greift diese Sequenz nicht: iFIT-App sniffen und
+      die echten Stop-Bytes hier einsetzen.
     </div>
   </div>
 </div>
@@ -365,11 +382,11 @@ const S = {
   connected: false, inited: false,
   profile: "v81",
   pollTimer: null, counter: 0,
-  reqSpeed: null, reqIncline: null, reqStart: false,
+  reqSpeed: null, reqIncline: null, reqStart: false, reqStop: false,
   speed: 0.0, incline: 0.0,
   busy: false,
 };
-const SPEED_MAX = 16, SPEED_STEP = 0.5;
+const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
 
 // =============================================================
@@ -477,7 +494,7 @@ function onDisconnect() {
 function cleanup() {
   S.connected = S.inited = false;
   S.wrChar = S.ntChar = S.server = null;
-  S.reqSpeed = S.reqIncline = null; S.reqStart = false;
+  S.reqSpeed = S.reqIncline = null; S.reqStart = S.reqStop = false;
   S.speed = S.incline = 0; S.counter = 0;
   renderValues();
 }
@@ -551,11 +568,27 @@ async function pollTick() {
         S.speed = spd; S.reqSpeed = null; renderValues();
       }
     }
-    if (step === 5 && S.reqStart) {
-      log("→ Start-Sequenz…", "l-sys");
-      for (const p of START) { await bleWrite(p, "start", false); await sleep(PAIR_GAP); }
-      S.reqStart = false;
-      log("Laufband gestartet.", "l-ok");
+    if (step === 5) {
+      if (S.reqStart) {
+        log("→ Start-Sequenz…", "l-sys");
+        for (const p of START) { await bleWrite(p, "start", false); await sleep(PAIR_GAP); }
+        S.reqStart = false;
+        log("Laufband gestartet.", "l-ok");
+      }
+      if (S.reqStop) {
+        let seq = null;
+        try { seq = parseStopSeq(); }
+        catch { log("Stop-Sequenz: Hex ungültig.", "l-err"); }
+        if (seq && seq.length) {
+          log(`→ Stop-Sequenz (${seq.length} Frames)…`, "l-sys");
+          for (const p of seq) { await bleWrite(p, "stop", false); await sleep(PAIR_GAP); }
+          S.speed = 0; renderValues();
+          log("Stop gesendet.", "l-ok");
+        } else if (seq) {
+          log("Stop-Sequenz ist leer.", "l-err");
+        }
+        S.reqStop = false;
+      }
     }
   } catch (e) {
     log("Poll-Fehler: " + e.message, "l-err");
@@ -572,7 +605,12 @@ function queueIncline(v) { S.reqIncline = v; log(`Incline angefordert: ${v.toFix
 
 function stepSpeed(d) {
   let base = S.reqSpeed !== null ? S.reqSpeed : S.speed;
-  queueSpeed(Math.max(0, Math.min(SPEED_MAX, +(base + d).toFixed(1))));
+  let t = +(base + d).toFixed(1);
+  if (t < MIN_RUN) {
+    if (d < 0) { stopBelt(); return; }   // unter Minimum runter -> Stop
+    t = MIN_RUN;                          // hoch -> auf Minimum anheben
+  }
+  queueSpeed(Math.min(SPEED_MAX, t));
   renderValues();
 }
 function stepIncline(d) {
@@ -586,10 +624,20 @@ function startBelt() {
   S.reqStart = true;
   log("Start angefordert.", "l-sys");
 }
+function parseStopSeq() {
+  return $("stopSeq").value.split(/\n+/)
+    .map(l => l.trim()).filter(Boolean)
+    .map(line => {
+      const b = hx(line);
+      if (b.some(x => isNaN(x) || x < 0 || x > 255)) throw new Error("bad hex");
+      return b;
+    });
+}
 function stopBelt() {
-  queueSpeed(0);
-  renderValues();
-  log("Stop angefordert (Speed → 0).", "l-sys");
+  if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
+  S.reqStop  = true;
+  S.reqSpeed = null;
+  log("Stop angefordert (Stop-Sequenz).", "l-sys");
 }
 
 async function sendRaw() {
