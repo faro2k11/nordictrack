@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0e0b">
+<title>T6.5S · BLE Steuer-Prototyp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0d0e0b;
+    --panel:     #16180f;
+    --panel-2:   #1d2014;
+    --line:      #2c2f1d;
+    --ink:       #d8d6c4;
+    --ink-dim:   #7c7e63;
+    --amber:     #ffb627;
+    --amber-dk:  #c98410;
+    --green:     #74c46b;
+    --red:       #e0584a;
+    --blue:      #5fa8d6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); }
+  body {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: var(--ink);
+    min-height: 100dvh;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+    max-width: 560px; margin: 0 auto;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
+  }
+  header {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  header::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--amber);
+  }
+  h1 { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+  .sub { font-size: 11px; color: var(--ink-dim); margin-top: 3px; letter-spacing: .03em; }
+
+  .panel {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    margin-bottom: 12px;
+  }
+  .panel-h {
+    font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-dim);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+  .panel-b { padding: 12px; }
+
+  /* status line */
+  .status {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12px; letter-spacing: .03em;
+  }
+  .led {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--red); flex: none;
+    box-shadow: 0 0 8px -1px var(--red);
+    transition: all .25s;
+  }
+  .led.on  { background: var(--green); box-shadow: 0 0 9px 0 var(--green); }
+  .led.wait{ background: var(--amber); box-shadow: 0 0 9px 0 var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .dev-name { color: var(--amber); font-weight: 600; }
+
+  label.fld { display: block; font-size: 11px; color: var(--ink-dim); margin-bottom: 5px; letter-spacing: .04em; }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1; }
+
+  button {
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    letter-spacing: .03em;
+    color: var(--ink); background: var(--panel-2);
+    border: 1px solid var(--line);
+    padding: 11px 10px; cursor: pointer;
+    transition: background .12s, border-color .12s, transform .04s;
+  }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:hover:not(:disabled) { border-color: var(--amber-dk); }
+  button:disabled { opacity: .32; cursor: not-allowed; }
+  button.primary { background: var(--amber); color: #1a1500; border-color: var(--amber); }
+  button.primary:hover:not(:disabled) { background: #ffc24f; }
+  button.danger  { border-color: #5a2a24; color: var(--red); }
+  button.danger:hover:not(:disabled) { background: #2a1512; border-color: var(--red); }
+  button.go { border-color: #2f4d2c; color: var(--green); }
+  button.go:hover:not(:disabled) { background: #16240f; border-color: var(--green); }
+
+  .seg { display: flex; border: 1px solid var(--line); }
+  .seg button {
+    border: none; border-radius: 0; background: var(--panel);
+    flex: 1; font-size: 12px;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.sel { background: var(--amber); color: #1a1500; }
+
+  /* stepper */
+  .stepper { display: flex; align-items: stretch; border: 1px solid var(--line); margin-top: 4px; }
+  .stepper button {
+    border: none; width: 54px; flex: none; font-size: 20px; font-weight: 700;
+    background: var(--panel-2); color: var(--amber);
+  }
+  .stepper .val {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    padding: 6px 0; background: #0a0b07;
+  }
+  .stepper .val .big { font-size: 30px; font-weight: 700; color: var(--ink); line-height: 1; }
+  .stepper .val .unit { font-size: 10px; color: var(--ink-dim); margin-top: 3px; letter-spacing: .1em; }
+
+  input[type=text], input[type=number] {
+    font-family: inherit; font-size: 13px;
+    background: #0a0b07; color: var(--ink);
+    border: 1px solid var(--line); padding: 9px 10px; width: 100%;
+  }
+  input:focus { outline: none; border-color: var(--amber-dk); }
+
+  .mini { font-size: 11px; color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
+  .mini b { color: var(--ink); font-weight: 600; }
+
+  /* log */
+  #log {
+    background: #0a0b07; border: 1px solid var(--line);
+    height: 230px; overflow-y: auto;
+    font-size: 11px; line-height: 1.55;
+    padding: 8px 9px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .l-tx  { color: var(--amber); }
+  .l-rx  { color: var(--blue); }
+  .l-ok  { color: var(--green); }
+  .l-err { color: var(--red); }
+  .l-sys { color: var(--ink-dim); }
+  .l-t   { color: #4a4c39; }
+
+  .warn {
+    border: 1px solid #5a4520; background: #1c1708;
+    padding: 10px 12px; font-size: 11px; line-height: 1.55;
+    color: #d8c79a; margin-bottom: 12px;
+  }
+  .warn b { color: var(--amber); }
+  footer { font-size: 10px; color: #45473a; text-align: center; padding: 6px 0 2px; line-height: 1.5; }
+  .clearbtn { flex: none !important; width: auto; padding: 6px 12px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
+  <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
+</header>
+
+<div class="warn" id="ctxWarn" style="display:none">
+  <b>⚠ Kein Web-Bluetooth verfügbar.</b> Diese Seite muss in <b>Chrome auf Android</b>
+  und über <b>HTTPS</b> (z.B. GitHub Pages) geöffnet werden. Per <code>file://</code>
+  funktioniert Bluetooth nicht.
+</div>
+
+<!-- VERBINDUNG -->
+<div class="panel">
+  <div class="panel-h">1 · Verbindung</div>
+  <div class="panel-b">
+    <div class="status" style="margin-bottom:12px">
+      <div class="led" id="led"></div>
+      <span id="statusTxt">Getrennt</span>
+    </div>
+
+    <label class="fld">Init-Profil (bei Problemen umschalten)</label>
+    <div class="seg" id="profileSeg" style="margin-bottom:12px">
+      <button data-p="v81" class="sel">v81</button>
+      <button data-p="v83">v83</button>
+    </div>
+
+    <div class="row" style="margin-bottom:8px">
+      <button class="primary" id="btnConnect">Verbinden</button>
+      <button id="btnDisconnect" disabled>Trennen</button>
+    </div>
+    <button id="btnInit" disabled style="width:100%">Init-Sequenz senden</button>
+    <div class="mini">
+      Scan-Filter: Gerätename <b>I_TL…</b> / <b>I_IT…</b>. Falls dein Laufband nicht
+      auftaucht, unten „Alle Geräte" aktivieren und manuell wählen.<br>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
+        <input type="checkbox" id="chkAll" style="width:auto;flex:none"> Alle Geräte zeigen
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- STEUERUNG -->
+<div class="panel">
+  <div class="panel-h">2 · Steuerung</div>
+  <div class="panel-b">
+    <div class="row" style="margin-bottom:14px">
+      <button class="go" id="btnStart" disabled>▶ Start</button>
+      <button class="danger" id="btnStop" disabled>■ Stop</button>
+    </div>
+
+    <label class="fld">Geschwindigkeit</label>
+    <div class="stepper">
+      <button id="spdMinus" disabled>−</button>
+      <div class="val"><span class="big" id="spdVal">0.0</span><span class="unit">KM/H</span></div>
+      <button id="spdPlus" disabled>+</button>
+    </div>
+
+    <label class="fld" style="margin-top:14px">Steigung</label>
+    <div class="stepper">
+      <button id="incMinus" disabled>−</button>
+      <div class="val"><span class="big" id="incVal">0.0</span><span class="unit">PROZENT</span></div>
+      <button id="incPlus" disabled>+</button>
+    </div>
+
+    <div class="mini">
+      Sollwerte werden in die Poll-Schleife eingereiht und im Takt an die Konsole
+      gesendet (wie in QZ). <b>Speed</b> 0–16 km/h · <b>Incline</b> 0–10 %.
+      Einheit ggf. am Laufband-Display kalibrieren.
+    </div>
+  </div>
+</div>
+
+<!-- ROHBEFEHL -->
+<div class="panel">
+  <div class="panel-h">3 · Rohbefehl (Debug)</div>
+  <div class="panel-b">
+    <label class="fld">Hex-Bytes — ein BLE-Write auf 0x1534</label>
+    <div class="row">
+      <input type="text" id="rawHex" placeholder="fe 02 0d 02" style="flex:3">
+      <button id="btnRaw" disabled style="flex:1">Senden</button>
+    </div>
+    <div class="mini">Für eigene Frames / Sniffing-Abgleich. Leerzeichen egal.</div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="panel">
+  <div class="panel-h" style="display:flex;justify-content:space-between;align-items:center">
+    <span>4 · Protokoll</span>
+    <button class="clearbtn" id="btnClear">Leeren</button>
+  </div>
+  <div class="panel-b" style="padding:0">
+    <div id="log"></div>
+  </div>
+</div>
+
+<footer>
+  Prototyp zu Testzwecken · ohne Gewähr · Laufband nur mit Sicherheitsschlüssel<br>
+  und freier Fläche betreiben. Protokoll-Logik portierbar nach Kotlin / React Native.
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   NordicTrack T6.5S — BLE Steuer-Prototyp
+   Protokoll rekonstruiert aus QZ (qdomyos-zwift), Klasse
+   proformtreadmill, Profile nordictrack_t65s_treadmill (v81)
+   und nordictrack_t65s_83_treadmill (v83).
+   ============================================================ */
+
+// --- GATT UUIDs (Nordic-basierter proprietärer Service) -------
+const SVC    = "00001533-1412-efde-1523-785feabcd123";
+const CH_WR  = "00001534-1412-efde-1523-785feabcd123"; // Write
+const CH_NT  = "00001535-1412-efde-1523-785feabcd123"; // Notify
+
+// --- Timing ---------------------------------------------------
+const INIT_DELAY = 350;   // ms zwischen Init-Writes (QZ: 400-600)
+const POLL_TICK  = 260;   // ms pro Poll-Schritt
+const PAIR_GAP   = 45;    // ms zwischen Header- und Payload-Write
+
+// --- Hex-Helfer -----------------------------------------------
+const hx = s => s.trim().split(/\s+/).map(b => parseInt(b,16));
+const toHex = arr => Array.from(arr,b => b.toString(16).padStart(2,"0")).join(" ");
+
+// --- Init-Sequenzen (Reihenfolge exakt wie QZ btinit) ---------
+// Gemeinsame Pakete v81 / v83
+const C = {
+  i1: hx("fe 02 08 02"),
+  i2: hx("ff 08 02 04 02 04 02 04 81 87 00 00 00 00 00 00 00 00 00 00"),
+  i3: hx("ff 08 02 04 02 04 04 04 80 88 00 00 00 00 00 00 00 00 00 00"),
+  i4: hx("ff 08 02 04 02 04 04 04 88 90 00 00 00 00 00 00 00 00 00 00"),
+  i5: hx("fe 02 0a 02"),
+  i6: hx("ff 0a 02 04 02 06 02 06 82 00 00 8a 00 00 00 00 00 00 00 00"),
+  i7: hx("ff 0a 02 04 02 06 02 06 84 00 00 8c 00 00 00 00 00 00 00 00"),
+  i8: hx("ff 08 02 04 02 04 02 04 95 9b 00 00 00 00 00 00 00 00 00 00"),
+  i9: hx("fe 02 2c 04"),
+  n1: hx("fe 02 19 03"),
+  n3: hx("ff 07 00 00 00 10 00 08 6e 00 00 00 00 00 00 00 00 00 00 00"),
+  n4: hx("fe 02 17 03"),
+  n5: hx("00 12 02 04 02 13 04 13 02 0c 00 00 00 00 00 00 00 00 00 00"),
+  n6: hx("ff 05 00 80 00 00 a5 00 00 00 00 00 00 00 00 00 00 00 00 00"),
+};
+const PROFILES = {
+  v81: {
+    i10: hx("00 12 02 04 02 28 04 28 90 07 01 ce c4 b0 aa a2 a8 94 96 96"),
+    i11: hx("01 12 ac a8 a2 ba d0 dc ce fe 14 00 3a 52 78 64 86 a6 fc 18"),
+    i12: hx("ff 08 32 4a a0 88 02 00 00 44 00 00 00 00 00 00 00 00 00 00"),
+    n2:  hx("00 12 02 04 02 15 04 15 02 00 0f 00 10 00 d8 1c 48 00 00 e0"),
+  },
+  v83: {
+    i10: hx("00 12 02 04 02 28 04 28 90 07 01 f4 fc fe 06 00 18 12 22 3c"),
+    i11: hx("01 12 44 56 7e 88 b0 aa ca e4 0c 2e 76 90 a8 c2 12 2c 74 86"),
+    i12: hx("ff 08 ce 18 60 98 02 00 00 aa 00 00 00 00 00 00 00 00 00 00"),
+    n2:  hx("00 12 02 04 02 15 04 15 02 0e 00 00 00 00 00 00 00 00 00 00"),
+  }
+};
+function initSequence(prof) {
+  const p = PROFILES[prof];
+  return [
+    C.i1, C.i2, C.i1, C.i3, C.i1, C.i4, C.i5, C.i6, C.i5, C.i7,
+    C.i1, C.i8, C.i9, p.i10, p.i11, p.i12,
+    C.n1, p.n2, C.n3, C.n4, C.n5, C.n6
+  ];
+}
+
+// --- Poll-Pakete (gemeinsam v81/v83) --------------------------
+const POLL = [
+  hx("fe 02 19 03"),                                                     // 0
+  hx("00 12 02 04 02 15 04 15 02 00 0f 80 0a 41 00 00 00 00 00 00"),     // 1
+  hx("ff 07 00 00 00 81 00 10 86 00 00 00 00 00 00 00 00 00 00 00"),     // 2  -> hier Speed/Incline
+  hx("fe 02 14 03"),                                                     // 3
+  hx("00 12 02 04 02 10 04 10 02 00 0a 1b 94 30 00 00 40 50 00 80"),     // 4
+  hx("ff 02 18 27 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"),     // 5  -> hier Start
+];
+
+// --- Start-Sequenz (Standard-t65s, non-miles) -----------------
+const START = [
+  hx("fe 02 20 03"),
+  hx("00 12 02 04 02 1c 04 1c 02 09 00 00 40 02 18 40 00 00 80 ca"),
+  hx("ff 0e 05 00 00 c7 20 58 02 01 b4 00 58 02 00 64 00 00 00 00"),
+  hx("fe 02 11 02"),
+  hx("ff 11 02 04 02 0d 04 0d 02 02 03 10 c8 00 00 00 0a 00 fa 00"),
+];
+
+// --- Speed/Incline Frame-Builder ------------------------------
+// cmd 0x01 = Speed, 0x02 = Incline. Wert*100 little-endian.
+// Checksumme (t65s): byte14 = byteLO + 0x12
+function buildSetFrame(cmd, value) {
+  const v   = Math.round(value * 100);
+  const lo  = v & 0xff;
+  const hi  = (v >> 8) & 0xff;
+  const chk = (lo + 0x12) & 0xff;
+  const header  = hx("fe 02 0d 02");
+  const payload = [0xff,0x0d,0x02,0x04,0x02,0x09,0x04,0x09,0x02,0x01,
+                   cmd, lo, hi, 0x00, chk, 0x00,0x00,0x00,0x00,0x00];
+  return [header, payload];
+}
+
+// =============================================================
+//  Zustand
+// =============================================================
+const S = {
+  device: null, server: null, wrChar: null, ntChar: null,
+  connected: false, inited: false,
+  profile: "v81",
+  pollTimer: null, counter: 0,
+  reqSpeed: null, reqIncline: null, reqStart: false,
+  speed: 0.0, incline: 0.0,
+  busy: false,
+};
+const SPEED_MAX = 16, SPEED_STEP = 0.5;
+const INC_MAX   = 10, INC_STEP   = 0.5;
+
+// =============================================================
+//  UI-Referenzen + Logging
+// =============================================================
+const $ = id => document.getElementById(id);
+const logEl = $("log");
+
+function log(msg, cls) {
+  const t = new Date().toTimeString().slice(0,8);
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="l-t">${t}</span> <span class="${cls||"l-sys"}">${msg}</span>`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+  if (logEl.children.length > 400) logEl.removeChild(logEl.firstChild);
+}
+
+// =============================================================
+//  BLE Low-Level
+// =============================================================
+function pickWriteMode(ch) {
+  // bevorzugt WithResponse, sonst WithoutResponse
+  if (ch.properties.write) return "res";
+  if (ch.properties.writeWithoutResponse) return "nores";
+  return "res";
+}
+let WRITE_MODE = "res";
+
+async function bleWrite(bytes, tag, quiet) {
+  if (!S.wrChar) throw new Error("nicht verbunden");
+  const buf = new Uint8Array(bytes);
+  if (WRITE_MODE === "nores") await S.wrChar.writeValueWithoutResponse(buf);
+  else                        await S.wrChar.writeValueWithResponse(buf);
+  if (!quiet) log(`» ${toHex(bytes)}${tag ? "  ("+tag+")" : ""}`, "l-tx");
+}
+
+// Header + Payload als Paar senden
+async function bleWritePair(pair, tag) {
+  await bleWrite(pair[0], tag+" hdr", false);
+  await sleep(PAIR_GAP);
+  await bleWrite(pair[1], tag+" pl", false);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function onNotify(ev) {
+  const dv = ev.target.value;
+  const arr = [];
+  for (let i = 0; i < dv.byteLength; i++) arr.push(dv.getUint8(i));
+  log(`« ${toHex(arr)}`, "l-rx");
+}
+
+// =============================================================
+//  Verbinden
+// =============================================================
+async function connect() {
+  if (!navigator.bluetooth) { log("Web Bluetooth nicht verfügbar.", "l-err"); return; }
+  try {
+    setStatus("wait", "Gerät wählen…");
+    log("Scan gestartet…", "l-sys");
+
+    const opts = $("chkAll").checked
+      ? { acceptAllDevices: true, optionalServices: [SVC] }
+      : { filters: [{ namePrefix: "I_TL" }, { namePrefix: "I_IT" }],
+          optionalServices: [SVC] };
+
+    S.device = await navigator.bluetooth.requestDevice(opts);
+    S.device.addEventListener("gattserverdisconnected", onDisconnect);
+    log(`Gerät: ${S.device.name || "(ohne Name)"}`, "l-sys");
+
+    setStatus("wait", "Verbinde GATT…");
+    S.server  = await S.device.gatt.connect();
+    const svc = await S.server.getPrimaryService(SVC);
+    S.wrChar  = await svc.getCharacteristic(CH_WR);
+    S.ntChar  = await svc.getCharacteristic(CH_NT);
+
+    WRITE_MODE = pickWriteMode(S.wrChar);
+    log(`Service + Characteristics OK · Write-Modus: ${WRITE_MODE === "res" ? "with response" : "without response"}`, "l-ok");
+
+    await S.ntChar.startNotifications();
+    S.ntChar.addEventListener("characteristicvaluechanged", onNotify);
+    log("Notifications aktiv (0x1535).", "l-ok");
+
+    S.connected = true;
+    setStatus("on", S.device.name || "verbunden");
+    $("statusTxt").innerHTML = `Verbunden · <span class="dev-name">${S.device.name || "Gerät"}</span>`;
+    refreshUI();
+    log("Bereit. Jetzt Init-Sequenz senden.", "l-ok");
+  } catch (e) {
+    log("Verbindung fehlgeschlagen: " + e.message, "l-err");
+    setStatus("off", "Getrennt");
+    cleanup();
+    refreshUI();
+  }
+}
+
+function onDisconnect() {
+  log("Verbindung verloren.", "l-err");
+  stopPoll();
+  cleanup();
+  setStatus("off", "Getrennt");
+  refreshUI();
+}
+
+function cleanup() {
+  S.connected = S.inited = false;
+  S.wrChar = S.ntChar = S.server = null;
+  S.reqSpeed = S.reqIncline = null; S.reqStart = false;
+  S.speed = S.incline = 0; S.counter = 0;
+  renderValues();
+}
+
+async function disconnect() {
+  stopPoll();
+  try { if (S.device && S.device.gatt.connected) S.device.gatt.disconnect(); } catch(e){}
+  cleanup();
+  setStatus("off", "Getrennt");
+  refreshUI();
+  log("Getrennt.", "l-sys");
+}
+
+// =============================================================
+//  Init-Sequenz
+// =============================================================
+async function runInit() {
+  if (!S.connected || S.busy) return;
+  S.busy = true; refreshUI();
+  const seq = initSequence(S.profile);
+  log(`Init-Sequenz '${S.profile}' — ${seq.length} Pakete…`, "l-sys");
+  try {
+    for (let i = 0; i < seq.length; i++) {
+      await bleWrite(seq[i], `init ${i+1}/${seq.length}`, false);
+      await sleep(INIT_DELAY);
+    }
+    S.inited = true;
+    log("Init abgeschlossen. Poll-Schleife startet.", "l-ok");
+    startPoll();
+  } catch (e) {
+    log("Init-Fehler: " + e.message, "l-err");
+  }
+  S.busy = false; refreshUI();
+}
+
+// =============================================================
+//  Poll-Schleife  (Keep-alive + Anwenden der Sollwerte)
+// =============================================================
+function startPoll() {
+  if (S.pollTimer) return;
+  S.counter = 0;
+  S.pollTimer = setInterval(pollTick, POLL_TICK);
+}
+function stopPoll() {
+  if (S.pollTimer) clearInterval(S.pollTimer);
+  S.pollTimer = null;
+}
+
+let pollLock = false;
+async function pollTick() {
+  if (pollLock || !S.connected) return;
+  pollLock = true;
+  const step = S.counter;
+  try {
+    await bleWrite(POLL[step], `poll ${step}`, true);   // Keep-alive (leise)
+
+    if (step === 2) {
+      // Sollwerte anwenden — genau wie QZ in case 2
+      if (S.reqIncline !== null) {
+        const inc = Math.max(0, Math.min(INC_MAX, S.reqIncline));
+        log(`→ Incline setzen: ${inc.toFixed(1)} %`, "l-sys");
+        await sleep(PAIR_GAP);
+        await bleWritePair(buildSetFrame(0x02, inc), "incline");
+        S.incline = inc; S.reqIncline = null; renderValues();
+      }
+      if (S.reqSpeed !== null) {
+        const spd = Math.max(0, Math.min(SPEED_MAX, S.reqSpeed));
+        log(`→ Speed setzen: ${spd.toFixed(1)} km/h`, "l-sys");
+        await sleep(PAIR_GAP);
+        await bleWritePair(buildSetFrame(0x01, spd), "speed");
+        S.speed = spd; S.reqSpeed = null; renderValues();
+      }
+    }
+    if (step === 5 && S.reqStart) {
+      log("→ Start-Sequenz…", "l-sys");
+      for (const p of START) { await bleWrite(p, "start", false); await sleep(PAIR_GAP); }
+      S.reqStart = false;
+      log("Laufband gestartet.", "l-ok");
+    }
+  } catch (e) {
+    log("Poll-Fehler: " + e.message, "l-err");
+  }
+  S.counter = (S.counter + 1) % 6;
+  pollLock = false;
+}
+
+// =============================================================
+//  Aktionen
+// =============================================================
+function queueSpeed(v)   { S.reqSpeed = v;   log(`Speed angefordert: ${v.toFixed(1)}`, "l-sys"); }
+function queueIncline(v) { S.reqIncline = v; log(`Incline angefordert: ${v.toFixed(1)}`, "l-sys"); }
+
+function stepSpeed(d) {
+  let base = S.reqSpeed !== null ? S.reqSpeed : S.speed;
+  queueSpeed(Math.max(0, Math.min(SPEED_MAX, +(base + d).toFixed(1))));
+  renderValues();
+}
+function stepIncline(d) {
+  let base = S.reqIncline !== null ? S.reqIncline : S.incline;
+  queueIncline(Math.max(0, Math.min(INC_MAX, +(base + d).toFixed(1))));
+  renderValues();
+}
+
+function startBelt() {
+  if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
+  S.reqStart = true;
+  log("Start angefordert.", "l-sys");
+}
+function stopBelt() {
+  queueSpeed(0);
+  renderValues();
+  log("Stop angefordert (Speed → 0).", "l-sys");
+}
+
+async function sendRaw() {
+  const raw = $("rawHex").value.trim();
+  if (!raw) return;
+  let bytes;
+  try {
+    bytes = hx(raw);
+    if (bytes.some(b => isNaN(b) || b < 0 || b > 255)) throw new Error("ungültige Bytes");
+  } catch { log("Hex ungültig.", "l-err"); return; }
+  try { await bleWrite(bytes, "raw", false); }
+  catch (e) { log("Raw-Write Fehler: " + e.message, "l-err"); }
+}
+
+// =============================================================
+//  UI-Rendering
+// =============================================================
+function setStatus(state, txt) {
+  const led = $("led");
+  led.className = "led" + (state === "on" ? " on" : state === "wait" ? " wait" : "");
+  $("statusTxt").textContent = txt;
+}
+function renderValues() {
+  const sShown = S.reqSpeed   !== null ? S.reqSpeed   : S.speed;
+  const iShown = S.reqIncline !== null ? S.reqIncline : S.incline;
+  $("spdVal").textContent = sShown.toFixed(1);
+  $("incVal").textContent = iShown.toFixed(1);
+}
+function refreshUI() {
+  const c = S.connected, ready = c && S.inited && !S.busy;
+  $("btnConnect").disabled    = c || S.busy;
+  $("btnDisconnect").disabled = !c;
+  $("btnInit").disabled       = !c || S.inited || S.busy;
+  $("btnStart").disabled      = !ready;
+  $("btnStop").disabled       = !ready;
+  $("spdMinus").disabled = $("spdPlus").disabled = !ready;
+  $("incMinus").disabled = $("incPlus").disabled = !ready;
+  $("btnRaw").disabled        = !c;
+  document.querySelectorAll("#profileSeg button").forEach(b => b.disabled = c);
+}
+
+// =============================================================
+//  Events
+// =============================================================
+$("btnConnect").onclick    = connect;
+$("btnDisconnect").onclick = disconnect;
+$("btnInit").onclick       = runInit;
+$("btnStart").onclick      = startBelt;
+$("btnStop").onclick       = stopBelt;
+$("spdPlus").onclick   = () => stepSpeed(+SPEED_STEP);
+$("spdMinus").onclick  = () => stepSpeed(-SPEED_STEP);
+$("incPlus").onclick   = () => stepIncline(+INC_STEP);
+$("incMinus").onclick  = () => stepIncline(-INC_STEP);
+$("btnRaw").onclick    = sendRaw;
+$("btnClear").onclick  = () => logEl.innerHTML = "";
+
+document.querySelectorAll("#profileSeg button").forEach(b => {
+  b.onclick = () => {
+    if (S.connected) return;
+    document.querySelectorAll("#profileSeg button").forEach(x => x.classList.remove("sel"));
+    b.classList.add("sel");
+    S.profile = b.dataset.p;
+    log(`Profil: ${S.profile}`, "l-sys");
+  };
+});
+
+// init
+if (!navigator.bluetooth) {
+  $("ctxWarn").style.display = "block";
+}
+log("Prototyp geladen. 'Verbinden' antippen.", "l-sys");
+log("Reihenfolge: Verbinden → Init senden → Start → Speed/Incline.", "l-sys");
+refreshUI(); renderValues();
+</script>
+</body>
+</html>
