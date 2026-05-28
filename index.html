@@ -104,6 +104,8 @@
   button.primary:hover:not(:disabled) { background: #ffc24f; }
   button.danger  { border-color: #5a2a24; color: var(--red); }
   button.danger:hover:not(:disabled) { background: #2a1512; border-color: var(--red); }
+  button.warn-b { border-color: #5a4a20; color: var(--amber); }
+  button.warn-b:hover:not(:disabled) { background: #1c1708; border-color: var(--amber); }
   button.go { border-color: #2f4d2c; color: var(--green); }
   button.go:hover:not(:disabled) { background: #16240f; border-color: var(--green); }
 
@@ -168,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v0.4</div>
+  <div class="ver">v0.7</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -215,6 +217,7 @@
   <div class="panel-b">
     <div class="row" style="margin-bottom:14px">
       <button class="go" id="btnStart" disabled>▶ Start</button>
+      <button class="warn-b" id="btnPause" disabled>❚❚ Pause</button>
       <button class="danger" id="btnStop" disabled>■ Stop</button>
     </div>
 
@@ -235,23 +238,35 @@
     <div class="mini">
       Sollwerte laufen über die Poll-Schleife (wie in QZ). <b>Speed</b> 1–16 km/h
       — unter 1 km/h gibt es keine Laufgeschwindigkeit, ein Schritt nach unten löst
-      darum <b>Stop</b> aus · <b>Incline</b> 0–10 %.
+      darum <b>Pause</b> aus · <b>Incline</b> 0–10 %.<br>
+      <b>Pause</b> = Band anhalten, Verbindung bleibt · <b>Stop</b> = Workout
+      beenden (Pause + Verbindung trennen, Konsole zurück in Idle).
     </div>
   </div>
 </div>
 
-<!-- STOP-SEQUENZ -->
+<!-- PAUSE / STOP-SEQUENZEN -->
 <div class="panel">
-  <div class="panel-h">2b · Stop-Sequenz</div>
+  <div class="panel-h">2b · Pause- &amp; Stop-Sequenzen</div>
   <div class="panel-b">
-    <label class="fld">Frames für den Stop-Knopf — ein Hex-Frame pro Zeile</label>
+    <label class="fld">Pause — ein Hex-Frame pro Zeile</label>
     <textarea id="stopSeq" rows="3">fe 02 0c 02
 ff 0c 02 04 02 08 04 08 02 00 02 00 10 20 00 00 00 00 00 00</textarea>
-    <div class="mini">
-      Voreinstellung: Stop-Sequenz aus eigenem BLE-Sniffing der iFIT-App für die
-      T6.5S (NTL17915-INT.1, v83). Falls eine Firmware-Variante diese Bytes nicht
-      akzeptiert: hier per Sniffing-Trace ersetzen.
+
+    <label class="fld" style="margin-top:12px">Stop / Workout beenden — ein Hex-Frame pro Zeile</label>
+    <textarea id="endSeq" rows="3">fe 02 0f 02
+ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00</textarea>
+
+    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;font-size:11px;color:var(--ink-dim)">
+      <input type="checkbox" id="chkDiscOnStop" checked style="width:auto;flex:none">
+      Nach Stop-Sequenz die Verbindung trennen
+    </label>
+    <div class="mini" style="margin-top:8px">
+      Beide Sequenzen aus eigenem BLE-Sniffing der iFIT-App (T6.5S `-INT.1`, v83).<br>
+      <b>Pause</b> = Band anhalten, Session läuft weiter. <b>Stop</b> = Workout beenden.
     </div>
+  </div>
+</div>
   </div>
 </div>
 
@@ -582,20 +597,6 @@ async function pollTick() {
         S.reqStart = false;
         log("Laufband gestartet.", "l-ok");
       }
-      if (S.reqStop) {
-        let seq = null;
-        try { seq = parseStopSeq(); }
-        catch { log("Stop-Sequenz: Hex ungültig.", "l-err"); }
-        if (seq && seq.length) {
-          log(`→ Stop-Sequenz (${seq.length} Frames)…`, "l-sys");
-          for (const p of seq) { await bleWrite(p, "stop", false); await sleep(PAIR_GAP); }
-          S.speed = 0; renderValues();
-          log("Stop gesendet.", "l-ok");
-        } else if (seq) {
-          log("Stop-Sequenz ist leer.", "l-err");
-        }
-        S.reqStop = false;
-      }
     }
   } catch (e) {
     log("Poll-Fehler: " + e.message, "l-err");
@@ -614,8 +615,8 @@ function stepSpeed(d) {
   let base = S.reqSpeed !== null ? S.reqSpeed : S.speed;
   let t = +(base + d).toFixed(1);
   if (t < MIN_RUN) {
-    if (d < 0) { stopBelt(); return; }   // unter Minimum runter -> Stop
-    t = MIN_RUN;                          // hoch -> auf Minimum anheben
+    if (d < 0) { pauseBelt(); return; }   // unter Minimum runter -> Pause
+    t = MIN_RUN;                           // hoch -> auf Minimum anheben
   }
   queueSpeed(Math.min(SPEED_MAX, t));
   renderValues();
@@ -640,11 +641,78 @@ function parseStopSeq() {
       return b;
     });
 }
+function parseSeq(elId, label) {
+  return $(elId).value.split(/\n+/)
+    .map(l => l.trim()).filter(Boolean)
+    .map(line => {
+      const b = hx(line);
+      if (b.some(x => isNaN(x) || x < 0 || x > 255))
+        throw new Error(`${label}: ungültiges Hex`);
+      return b;
+    });
+}
+function parseStopSeq() { return parseSeq("stopSeq", "Pause"); }
+function parseEndSeq()  { return parseSeq("endSeq",  "Stop"); }
+
+async function sendSequence(seq, tag) {
+  stopPoll();
+  let guard = 0;
+  while (pollLock && guard < 30) { await sleep(20); guard++; }
+
+  log(`→ ${tag}-Sequenz (${seq.length} Frames, exklusiv)…`, "l-sys");
+  try {
+    for (const p of seq) {
+      await bleWrite(p, tag.toLowerCase(), false);
+      await sleep(PAIR_GAP);
+    }
+    return true;
+  } catch (e) {
+    log(`${tag}-Fehler: ` + e.message, "l-err");
+    return false;
+  }
+}
+
+function pauseBelt() {
+  if (!S.inited || S.busy) { log("Erst Init senden.", "l-err"); return; }
+  let seq;
+  try { seq = parseStopSeq(); } catch (e) { log(e.message, "l-err"); return; }
+  if (!seq.length) { log("Pause-Sequenz ist leer.", "l-err"); return; }
+  S.reqSpeed = S.reqIncline = null;
+  S.busy = true; refreshUI();
+  (async () => {
+    const ok = await sendSequence(seq, "Pause");
+    if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Band hält an, Verbindung bleibt.", "l-ok"); }
+    await sleep(200);
+    startPoll();
+    S.busy = false; refreshUI();
+  })();
+}
+
 function stopBelt() {
-  if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
-  S.reqStop  = true;
-  S.reqSpeed = null;
-  log("Stop angefordert (Stop-Sequenz).", "l-sys");
+  if (!S.inited || S.busy) { log("Erst Init senden.", "l-err"); return; }
+  let seq;
+  try { seq = parseEndSeq(); } catch (e) { log(e.message, "l-err"); return; }
+  if (!seq.length) { log("Stop-Sequenz ist leer.", "l-err"); return; }
+  S.reqSpeed = S.reqIncline = null;
+  S.busy = true; refreshUI();
+  (async () => {
+    const ok = await sendSequence(seq, "Stop");
+    if (ok) {
+      S.speed = 0; renderValues();
+      log("Stop gesendet — Workout beendet.", "l-ok");
+    }
+    if (ok && $("chkDiscOnStop").checked) {
+      log("Trenne Verbindung…", "l-sys");
+      await sleep(400);
+      try { if (S.device && S.device.gatt.connected) S.device.gatt.disconnect(); }
+      catch(e) { log("Disconnect-Fehler: " + e.message, "l-err"); }
+      // onDisconnect übernimmt cleanup
+    } else {
+      await sleep(200);
+      startPoll();
+      S.busy = false; refreshUI();
+    }
+  })();
 }
 
 async function sendRaw() {
@@ -679,6 +747,7 @@ function refreshUI() {
   $("btnDisconnect").disabled = !c;
   $("btnInit").disabled       = !c || S.inited || S.busy;
   $("btnStart").disabled      = !ready;
+  $("btnPause").disabled      = !ready;
   $("btnStop").disabled       = !ready;
   $("spdMinus").disabled = $("spdPlus").disabled = !ready;
   $("incMinus").disabled = $("incPlus").disabled = !ready;
@@ -693,6 +762,7 @@ $("btnConnect").onclick    = connect;
 $("btnDisconnect").onclick = disconnect;
 $("btnInit").onclick       = runInit;
 $("btnStart").onclick      = startBelt;
+$("btnPause").onclick      = pauseBelt;
 $("btnStop").onclick       = stopBelt;
 $("spdPlus").onclick   = () => stepSpeed(+SPEED_STEP);
 $("spdMinus").onclick  = () => stepSpeed(-SPEED_STEP);
