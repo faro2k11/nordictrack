@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.1</div>
+  <div class="ver">v1.2</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -335,6 +335,11 @@ const C = {
   n4: hx("fe 02 17 03"),
   n5: hx("00 12 02 04 02 13 04 13 02 0c 00 00 00 00 00 00 00 00 00 00"),
   n6: hx("ff 05 00 80 00 00 a5 00 00 00 00 00 00 00 00 00 00 00 00 00"),
+  // iFIT „Control-Mode aktivieren" (aus echtem iFIT-Sniff, direkt nach Init):
+  a1: hx("fe 02 10 02"),
+  a2: hx("ff 10 02 04 02 0c 04 0c 02 04 00 00 00 02 98 21 00 d1 00 00"),
+  a3: hx("fe 02 10 02"),
+  a4: hx("ff 10 02 04 02 0c 04 0c 02 05 00 00 00 00 10 01 00 28 00 00"),
 };
 const PROFILES = {
   v81: {
@@ -355,7 +360,9 @@ function initSequence(prof) {
   return [
     C.i1, C.i2, C.i1, C.i3, C.i1, C.i4, C.i5, C.i6, C.i5, C.i7,
     C.i1, C.i8, C.i9, p.i10, p.i11, p.i12,
-    C.n1, p.n2, C.n3, C.n4, C.n5, C.n6
+    C.n1, p.n2, C.n3, C.n4, C.n5, C.n6,
+    // iFIT „Control-Mode aktivieren" — direkt nach Init
+    C.a1, C.a2, C.a3, C.a4
   ];
 }
 
