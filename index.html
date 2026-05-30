@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.0</div>
+  <div class="ver">v1.1</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -252,15 +252,14 @@
 ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00</textarea>
 
     <label class="fld" style="margin-top:12px">Stop / Workout beenden — ein Hex-Frame pro Zeile</label>
-    <textarea id="endSeq" rows="6">fe 02 0c 02
-ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00
-fe 02 0f 02
+    <textarea id="endSeq" rows="3">fe 02 0f 02
 ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00</textarea>
 
     <div class="mini" style="margin-top:8px">
       Aus BLE-Sniffing der echten iFIT-App verifiziert (T6.5S `-INT.1`, v83):<br>
       <b>Pause</b> = das „Halt"-Vorbereitungs-Frame (spezielles 0c 02 mit Payload `02 12`).<br>
-      <b>Stop</b> = Halt-Frame + Workout-Ende-Frame (0f 02).
+      <b>Stop</b> = sendet erst die Pause-Sequenz, lässt dann <b>1 Sekunde lang die
+      Polls weiterlaufen</b> (wie iFIT!), und schickt danach das Stop-Frame.
     </div>
   </div>
 </div>
@@ -677,11 +676,10 @@ async function rampDownSpeed() {
   log(`Rampe fertig bei ${cur.toFixed(1)} km/h.`, "l-ok");
 }
 
-async function sendSequence(seq, tag) {
-  stopPoll();
+async function sendSequenceRaw(seq, tag) {
+  // Caller manages stopPoll/startPoll
   let guard = 0;
   while (pollLock && guard < 30) { await sleep(20); guard++; }
-
   log(`→ ${tag}-Sequenz (${seq.length} Frames, exklusiv)…`, "l-sys");
   try {
     for (const p of seq) {
@@ -695,6 +693,12 @@ async function sendSequence(seq, tag) {
   }
 }
 
+async function sendSequence(seq, tag) {
+  stopPoll();
+  const ok = await sendSequenceRaw(seq, tag);
+  return ok;
+}
+
 function pauseBelt() {
   if (!S.inited || S.busy) { log("Erst Init senden.", "l-err"); return; }
   let seq;
@@ -704,34 +708,44 @@ function pauseBelt() {
   S.busy = true; refreshUI();
   (async () => {
     stopPoll();
-    let guard = 0;
-    while (pollLock && guard < 30) { await sleep(20); guard++; }
-    const ok = await sendSequence(seq, "Pause");
-    if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Band sollte anhalten.", "l-ok"); }
-    await sleep(200);
-    startPoll();
+    const ok = await sendSequenceRaw(seq, "Pause");
+    startPoll();   // sofort weiterpollen — wie iFIT
+    if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Polls laufen weiter.", "l-ok"); }
     S.busy = false; refreshUI();
   })();
 }
 
 function stopBelt() {
   if (!S.inited || S.busy) { log("Erst Init senden.", "l-err"); return; }
-  let seq;
-  try { seq = parseEndSeq(); } catch (e) { log(e.message, "l-err"); return; }
-  if (!seq.length) { log("Stop-Sequenz ist leer.", "l-err"); return; }
+  let pauseSq, endSq;
+  try {
+    pauseSq = parseStopSeq();
+    endSq   = parseEndSeq();
+  } catch (e) { log(e.message, "l-err"); return; }
+  if (!pauseSq.length || !endSq.length) { log("Stop: Sequenz leer.", "l-err"); return; }
   S.reqSpeed = S.reqIncline = null;
   S.busy = true; refreshUI();
   (async () => {
+    // Phase 1: Pause-Vorbereitungs-Frames senden
     stopPoll();
-    let guard = 0;
-    while (pollLock && guard < 30) { await sleep(20); guard++; }
-    const ok = await sendSequence(seq, "Stop");
-    if (ok) {
+    const ok1 = await sendSequenceRaw(pauseSq, "Stop-Vorbereitung");
+    if (!ok1) {
+      startPoll();
+      S.busy = false; refreshUI();
+      return;
+    }
+    // Phase 2: ~1 Sekunde lang weiterpollen (wie iFIT)
+    startPoll();
+    log("Warte 1 Sekunde (Polls laufen weiter)…", "l-sys");
+    await sleep(1000);
+    // Phase 3: eigentlicher Stop-Frame
+    stopPoll();
+    const ok2 = await sendSequenceRaw(endSq, "Stop");
+    startPoll();
+    if (ok2) {
       S.speed = 0; renderValues();
       log("Stop gesendet — Workout beendet (Verbindung bleibt).", "l-ok");
     }
-    await sleep(200);
-    startPoll();
     S.busy = false; refreshUI();
   })();
 }
