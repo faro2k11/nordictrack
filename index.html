@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v0.7</div>
+  <div class="ver">v0.8</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -239,8 +239,8 @@
       Sollwerte laufen über die Poll-Schleife (wie in QZ). <b>Speed</b> 1–16 km/h
       — unter 1 km/h gibt es keine Laufgeschwindigkeit, ein Schritt nach unten löst
       darum <b>Pause</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Pause</b> = Band anhalten, Verbindung bleibt · <b>Stop</b> = Workout
-      beenden (Pause + Verbindung trennen, Konsole zurück in Idle).
+      <b>Pause</b> / <b>Stop</b> rampen die Geschwindigkeit zuerst auf 1 km/h
+      herunter (wie die iFIT-App), dann folgt der Pause- bzw. Stop-Befehl.
     </div>
   </div>
 </div>
@@ -410,6 +410,9 @@ const S = {
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
+const RAMP_STEP = 1.0;   // km/h pro Rampen-Schritt
+const RAMP_TICK = 300;   // ms zwischen Rampen-Schritten
+const RAMP_FLOOR = 1.0;  // Mindest-Speed bevor Pause/Stop-Befehl folgt
 
 // =============================================================
 //  UI-Referenzen + Logging
@@ -654,6 +657,29 @@ function parseSeq(elId, label) {
 function parseStopSeq() { return parseSeq("stopSeq", "Pause"); }
 function parseEndSeq()  { return parseSeq("endSeq",  "Stop"); }
 
+async function rampDownSpeed() {
+  // Geschwindigkeit in Schritten reduzieren bis RAMP_FLOOR, jeweils direkt
+  // als Set-Frame senden (außerhalb der Poll-Schleife, da die schon pausiert ist).
+  let cur = S.speed;
+  if (cur <= RAMP_FLOOR) {
+    log(`Bereits bei ${cur.toFixed(1)} km/h — keine Rampe nötig.`, "l-sys");
+    return;
+  }
+  log(`Rampe: ${cur.toFixed(1)} → ${RAMP_FLOOR.toFixed(1)} km/h…`, "l-sys");
+  while (cur > RAMP_FLOOR) {
+    cur = Math.max(RAMP_FLOOR, +(cur - RAMP_STEP).toFixed(1));
+    try {
+      await bleWritePair(buildSetFrame(0x01, cur), "ramp speed");
+      S.speed = cur; renderValues();
+    } catch (e) {
+      log("Rampen-Fehler: " + e.message, "l-err");
+      return;
+    }
+    await sleep(RAMP_TICK);
+  }
+  log(`Rampe fertig bei ${cur.toFixed(1)} km/h.`, "l-ok");
+}
+
 async function sendSequence(seq, tag) {
   stopPoll();
   let guard = 0;
@@ -680,6 +706,11 @@ function pauseBelt() {
   S.reqSpeed = S.reqIncline = null;
   S.busy = true; refreshUI();
   (async () => {
+    // Poll anhalten, dann rampen, dann Pause-Sequenz
+    stopPoll();
+    let guard = 0;
+    while (pollLock && guard < 30) { await sleep(20); guard++; }
+    await rampDownSpeed();
     const ok = await sendSequence(seq, "Pause");
     if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Band hält an, Verbindung bleibt.", "l-ok"); }
     await sleep(200);
@@ -696,6 +727,11 @@ function stopBelt() {
   S.reqSpeed = S.reqIncline = null;
   S.busy = true; refreshUI();
   (async () => {
+    // Poll anhalten, dann rampen, dann Stop-Sequenz
+    stopPoll();
+    let guard = 0;
+    while (pollLock && guard < 30) { await sleep(20); guard++; }
+    await rampDownSpeed();
     const ok = await sendSequence(seq, "Stop");
     if (ok) {
       S.speed = 0; renderValues();
