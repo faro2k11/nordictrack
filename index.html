@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.2</div>
+  <div class="ver">v1.3</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -376,13 +376,24 @@ const POLL = [
   hx("ff 02 18 27 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"),     // 5  -> hier Start
 ];
 
-// --- Start-Sequenz (Standard-t65s, non-miles) -----------------
+// --- Start-Sequenz (aus iFIT-Sniff: kompletter Workout-Start) -
+// Statt QZ-Style fe 02 20 03 verwenden wir genau die Frames, die
+// iFIT beim Workout-Start sendet — damit das Laufband in den
+// iFIT-Kontrollmodus geht, in dem Stop/Pause greifen.
 const START = [
-  hx("fe 02 20 03"),
-  hx("00 12 02 04 02 1c 04 1c 02 09 00 00 40 02 18 40 00 00 80 ca"),
-  hx("ff 0e 05 00 00 c7 20 58 02 01 b4 00 58 02 00 64 00 00 00 00"),
-  hx("fe 02 11 02"),
-  hx("ff 11 02 04 02 0d 04 0d 02 02 03 10 c8 00 00 00 0a 00 fa 00"),
+  hx("fe 02 10 02"),
+  hx("ff 10 02 04 02 0c 04 0c 02 04 00 00 00 02 98 21 00 d1 00 00"),
+  hx("fe 02 10 02"),
+  hx("ff 10 02 04 02 0c 04 0c 02 05 00 00 00 00 10 01 00 28 00 00"),
+  hx("fe 02 17 03"),
+  hx("00 12 02 04 02 13 04 13 02 0c 00 00 00 00 00 00 00 00 00 00"),
+  hx("ff 05 00 80 00 00 a5 00 00 00 00 00 00 00 00 00 00 00 00 00"),
+  hx("fe 02 0d 02"),
+  hx("ff 0d 02 04 02 09 04 09 02 02 00 10 02 00 23 00 00 00 00 00"),
+  hx("fe 02 0f 02"),
+  hx("ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 08 1e 00 00 00 00"),
+  hx("fe 02 0c 02"),
+  hx("ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00"),
 ];
 
 // --- Speed/Incline Frame-Builder ------------------------------
