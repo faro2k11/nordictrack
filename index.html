@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.3</div>
+  <div class="ver">v1.4</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -252,14 +252,17 @@
 ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00</textarea>
 
     <label class="fld" style="margin-top:12px">Stop / Workout beenden — ein Hex-Frame pro Zeile</label>
-    <textarea id="endSeq" rows="3">fe 02 0f 02
-ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00</textarea>
+    <textarea id="endSeq" rows="6">fe 02 0f 02
+ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00
+fe 02 0d 02
+ff 0d 02 04 02 09 04 09 02 02 00 10 01 00 22 00 00 00 00 00</textarea>
 
     <div class="mini" style="margin-top:8px">
       Aus BLE-Sniffing der echten iFIT-App verifiziert (T6.5S `-INT.1`, v83):<br>
       <b>Pause</b> = das „Halt"-Vorbereitungs-Frame (spezielles 0c 02 mit Payload `02 12`).<br>
       <b>Stop</b> = sendet erst die Pause-Sequenz, lässt dann <b>1 Sekunde lang die
-      Polls weiterlaufen</b> (wie iFIT!), und schickt danach das Stop-Frame.
+      Polls weiterlaufen</b> (wie iFIT!), und schickt danach das Stop-Frame
+      <b>plus den abschließenden „Incline-Reset"-Befehl</b> (Commit).
     </div>
   </div>
 </div>
