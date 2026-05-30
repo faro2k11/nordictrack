@@ -170,7 +170,7 @@
 <body>
 
 <header>
-  <div class="ver">v0.8</div>
+  <div class="ver">v1.0</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -190,17 +190,11 @@
       <span id="statusTxt">Getrennt</span>
     </div>
 
-    <label class="fld">Init-Profil (bei Problemen umschalten)</label>
-    <div class="seg" id="profileSeg" style="margin-bottom:12px">
-      <button data-p="v81" class="sel">v81</button>
-      <button data-p="v83">v83</button>
-    </div>
-
     <div class="row" style="margin-bottom:8px">
       <button class="primary" id="btnConnect">Verbinden</button>
       <button id="btnDisconnect" disabled>Trennen</button>
     </div>
-    <button id="btnInit" disabled style="width:100%">Init-Sequenz senden</button>
+    <button id="btnInit" disabled style="width:100%">Init-Sequenz senden (v83)</button>
     <div class="mini">
       Scan-Filter: Gerätename <b>I_TL…</b> / <b>I_IT…</b>. Falls dein Laufband nicht
       auftaucht, unten „Alle Geräte" aktivieren und manuell wählen.<br>
@@ -220,6 +214,9 @@
       <button class="warn-b" id="btnPause" disabled>❚❚ Pause</button>
       <button class="danger" id="btnStop" disabled>■ Stop</button>
     </div>
+    <button id="btnDisconnectActive" class="danger" disabled style="width:100%;margin-bottom:6px">
+      ⏏ Verbindung trennen (Workout abbrechen)
+    </button>
 
     <label class="fld">Geschwindigkeit</label>
     <div class="stepper">
@@ -239,8 +236,9 @@
       Sollwerte laufen über die Poll-Schleife (wie in QZ). <b>Speed</b> 1–16 km/h
       — unter 1 km/h gibt es keine Laufgeschwindigkeit, ein Schritt nach unten löst
       darum <b>Pause</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Pause</b> / <b>Stop</b> rampen die Geschwindigkeit zuerst auf 1 km/h
-      herunter (wie die iFIT-App), dann folgt der Pause- bzw. Stop-Befehl.
+      <b>Pause</b> und <b>Stop</b> senden den Halt-Befehl sofort (wie iFIT) — die
+      Laufband-Firmware bremst dann intern. Verbindung bleibt in beiden Fällen.<br>
+      <b>Verbindung trennen</b> ist separat unten — beendet die BLE-Session.
     </div>
   </div>
 </div>
@@ -251,19 +249,18 @@
   <div class="panel-b">
     <label class="fld">Pause — ein Hex-Frame pro Zeile</label>
     <textarea id="stopSeq" rows="3">fe 02 0c 02
-ff 0c 02 04 02 08 04 08 02 00 02 00 10 20 00 00 00 00 00 00</textarea>
+ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00</textarea>
 
     <label class="fld" style="margin-top:12px">Stop / Workout beenden — ein Hex-Frame pro Zeile</label>
-    <textarea id="endSeq" rows="3">fe 02 0f 02
+    <textarea id="endSeq" rows="6">fe 02 0c 02
+ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00
+fe 02 0f 02
 ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00</textarea>
 
-    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;font-size:11px;color:var(--ink-dim)">
-      <input type="checkbox" id="chkDiscOnStop" checked style="width:auto;flex:none">
-      Nach Stop-Sequenz die Verbindung trennen
-    </label>
     <div class="mini" style="margin-top:8px">
-      Beide Sequenzen aus eigenem BLE-Sniffing der iFIT-App (T6.5S `-INT.1`, v83).<br>
-      <b>Pause</b> = Band anhalten, Session läuft weiter. <b>Stop</b> = Workout beenden.
+      Aus BLE-Sniffing der echten iFIT-App verifiziert (T6.5S `-INT.1`, v83):<br>
+      <b>Pause</b> = das „Halt"-Vorbereitungs-Frame (spezielles 0c 02 mit Payload `02 12`).<br>
+      <b>Stop</b> = Halt-Frame + Workout-Ende-Frame (0f 02).
     </div>
   </div>
 </div>
@@ -402,7 +399,7 @@ function buildSetFrame(cmd, value) {
 const S = {
   device: null, server: null, wrChar: null, ntChar: null,
   connected: false, inited: false,
-  profile: "v81",
+  profile: "v83",
   pollTimer: null, counter: 0,
   reqSpeed: null, reqIncline: null, reqStart: false, reqStop: false,
   speed: 0.0, incline: 0.0,
@@ -706,13 +703,11 @@ function pauseBelt() {
   S.reqSpeed = S.reqIncline = null;
   S.busy = true; refreshUI();
   (async () => {
-    // Poll anhalten, dann rampen, dann Pause-Sequenz
     stopPoll();
     let guard = 0;
     while (pollLock && guard < 30) { await sleep(20); guard++; }
-    await rampDownSpeed();
     const ok = await sendSequence(seq, "Pause");
-    if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Band hält an, Verbindung bleibt.", "l-ok"); }
+    if (ok) { S.speed = 0; renderValues(); log("Pause gesendet — Band sollte anhalten.", "l-ok"); }
     await sleep(200);
     startPoll();
     S.busy = false; refreshUI();
@@ -727,27 +722,17 @@ function stopBelt() {
   S.reqSpeed = S.reqIncline = null;
   S.busy = true; refreshUI();
   (async () => {
-    // Poll anhalten, dann rampen, dann Stop-Sequenz
     stopPoll();
     let guard = 0;
     while (pollLock && guard < 30) { await sleep(20); guard++; }
-    await rampDownSpeed();
     const ok = await sendSequence(seq, "Stop");
     if (ok) {
       S.speed = 0; renderValues();
-      log("Stop gesendet — Workout beendet.", "l-ok");
+      log("Stop gesendet — Workout beendet (Verbindung bleibt).", "l-ok");
     }
-    if (ok && $("chkDiscOnStop").checked) {
-      log("Trenne Verbindung…", "l-sys");
-      await sleep(400);
-      try { if (S.device && S.device.gatt.connected) S.device.gatt.disconnect(); }
-      catch(e) { log("Disconnect-Fehler: " + e.message, "l-err"); }
-      // onDisconnect übernimmt cleanup
-    } else {
-      await sleep(200);
-      startPoll();
-      S.busy = false; refreshUI();
-    }
+    await sleep(200);
+    startPoll();
+    S.busy = false; refreshUI();
   })();
 }
 
@@ -785,10 +770,10 @@ function refreshUI() {
   $("btnStart").disabled      = !ready;
   $("btnPause").disabled      = !ready;
   $("btnStop").disabled       = !ready;
+  $("btnDisconnectActive").disabled = !c;
   $("spdMinus").disabled = $("spdPlus").disabled = !ready;
   $("incMinus").disabled = $("incPlus").disabled = !ready;
   $("btnRaw").disabled        = !c;
-  document.querySelectorAll("#profileSeg button").forEach(b => b.disabled = c);
 }
 
 // =============================================================
@@ -800,22 +785,13 @@ $("btnInit").onclick       = runInit;
 $("btnStart").onclick      = startBelt;
 $("btnPause").onclick      = pauseBelt;
 $("btnStop").onclick       = stopBelt;
+$("btnDisconnectActive").onclick = disconnect;
 $("spdPlus").onclick   = () => stepSpeed(+SPEED_STEP);
 $("spdMinus").onclick  = () => stepSpeed(-SPEED_STEP);
 $("incPlus").onclick   = () => stepIncline(+INC_STEP);
 $("incMinus").onclick  = () => stepIncline(-INC_STEP);
 $("btnRaw").onclick    = sendRaw;
 $("btnClear").onclick  = () => logEl.innerHTML = "";
-
-document.querySelectorAll("#profileSeg button").forEach(b => {
-  b.onclick = () => {
-    if (S.connected) return;
-    document.querySelectorAll("#profileSeg button").forEach(x => x.classList.remove("sel"));
-    b.classList.add("sel");
-    S.profile = b.dataset.p;
-    log(`Profil: ${S.profile}`, "l-sys");
-  };
-});
 
 // init
 if (!navigator.bluetooth) {
