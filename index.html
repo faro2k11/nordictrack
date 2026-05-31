@@ -429,6 +429,34 @@ html, body {
 .stepper-block .row button:active:not(:disabled) { transform: scale(0.94); }
 .stepper-block .row button:disabled { opacity: 0.35; }
 
+/* Schnelltasten unter jedem Stepper (2×3-Grid für Querformat) */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+.quick-grid button {
+  background: var(--bg-2);
+  border: none;
+  border-radius: 8px;
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 0;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.quick-grid button:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--bg-3);
+}
+.quick-grid button:active:not(:disabled) { transform: scale(0.94); }
+.quick-grid button:disabled { opacity: 0.35; }
+
 .bottom-actions {
   display: flex; gap: 6px;
 }
@@ -441,8 +469,12 @@ html, body {
   color: var(--ink); background: var(--bg-2);
 }
 .bottom-actions button:disabled { opacity: 0.4; }
-.bottom-actions button.start  { background: var(--ring-2); color: #000; }
-.bottom-actions button.pause  { color: var(--accent); }
+.bottom-actions button.disconnect {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--red);
+  flex: 1;
+  font-size: 18px;
+}
 .bottom-actions button.exit   { flex: 0 0 44px; color: var(--ink-dim); font-size: 16px; }
 
 /* =============================================================================
@@ -608,7 +640,7 @@ body.bigscreen .ver-corner { display: none; }
       <div class="title">T6.5S</div>
       <div class="sub">Workout-Steuerung via Bluetooth</div>
     </div>
-    <div class="ver-badge">v2.0</div>
+    <div class="ver-badge">v2.1</div>
   </div>
 
   <div class="ctx-warn" id="ctxWarn" style="display:none">
@@ -654,6 +686,7 @@ body.bigscreen .ver-corner { display: none; }
 
   <div class="setup-footer">
     <button class="btn ghost" id="btnGoSettings">🔧 Diagnose / Einstellungen</button>
+    <button class="btn-mini" id="btnPreview">👁 Vorschau-Modus (Workout-Layout ohne Verbindung)</button>
     <button class="btn-mini" id="btnAbout">App-Info</button>
   </div>
 </div>
@@ -755,6 +788,14 @@ body.bigscreen .ver-corner { display: none; }
           <button class="minus" id="wSpdMinus">−</button>
           <button class="plus"  id="wSpdPlus">+</button>
         </div>
+        <div class="quick-grid" id="wSpdQuick">
+          <button data-spd="3">3</button>
+          <button data-spd="5">5</button>
+          <button data-spd="7">7</button>
+          <button data-spd="9">9</button>
+          <button data-spd="11">11</button>
+          <button data-spd="13">13</button>
+        </div>
       </div>
       <div class="stepper-block">
         <div class="lbl">Steigung</div>
@@ -763,11 +804,18 @@ body.bigscreen .ver-corner { display: none; }
           <button class="minus" id="wIncMinus">−</button>
           <button class="plus"  id="wIncPlus">+</button>
         </div>
+        <div class="quick-grid" id="wIncQuick">
+          <button data-inc="0">0 %</button>
+          <button data-inc="2">2 %</button>
+          <button data-inc="4">4 %</button>
+          <button data-inc="6">6 %</button>
+          <button data-inc="8">8 %</button>
+          <button data-inc="10">10 %</button>
+        </div>
       </div>
       <div class="bottom-actions">
-        <button class="pause" id="wPause">⏸</button>
-        <button class="start" id="wStop">■</button>
-        <button class="exit"  id="wBig">⛶</button>
+        <button class="disconnect" id="wDisconnect" title="Workout verlassen / trennen">⏻</button>
+        <button class="exit" id="wBig" title="Vollbild-Modus">⛶</button>
       </div>
     </div>
   </div>
@@ -808,7 +856,7 @@ body.bigscreen .ver-corner { display: none; }
   </div>
 </div>
 
-<div class="ver-corner">v2.0</div>
+<div class="ver-corner">v2.1</div>
 
 <script>
 "use strict";
@@ -997,6 +1045,10 @@ const S = {
   fragBuf: null,
 
   busy: false,
+
+  // Vorschau-Modus: ermöglicht das Anzeigen aller Views/Layouts ohne
+  // tatsächliche BLE-Verbindung, mit Demo-Werten (für UI-Tests).
+  previewMode: false,
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
@@ -1583,6 +1635,13 @@ const WORKOUT_MAX_SPD  = 12;
 const RING_CIRC = { time: 603, speed: 465, dist: 327 };
 
 function renderWorkoutView() {
+  // Quick-Buttons + Stepper aktivieren/deaktivieren je nach Status.
+  // Im Vorschau-Modus sind alle aktiv (zur UI-Demo), sonst nur wenn ready.
+  const ready = (S.inited && S.connected) || S.previewMode;
+  document.querySelectorAll("#wSpdQuick button, #wIncQuick button").forEach(b => b.disabled = !ready);
+  $("wSpdMinus").disabled = $("wSpdPlus").disabled = !ready;
+  $("wIncMinus").disabled = $("wIncPlus").disabled = !ready;
+
   // Hero: aktueller Speed (oder Soll mit Hold-Logik)
   const sp = currentDisplaySpeed();
   const inc = currentDisplayIncline();
@@ -1668,10 +1727,8 @@ function currentInclineDisplay() {
 function stepSpeed(d) {
   let base = currentSpeedDisplay();
   let t = +(base + d).toFixed(1);
-  if (t < MIN_RUN) {
-    if (d < 0) { pauseBelt(); return; }
-    t = MIN_RUN;
-  }
+  // Unter MIN_RUN wird nichts gesendet — Stop läuft über das Laufband
+  if (t < MIN_RUN) t = MIN_RUN;
   queueSpeed(Math.min(SPEED_MAX, t));
 }
 function stepIncline(d) {
@@ -1770,10 +1827,32 @@ $("wSpdMinus").onclick = () => stepSpeed(-SPEED_STEP);
 $("wSpdPlus").onclick  = () => stepSpeed(+SPEED_STEP);
 $("wIncMinus").onclick = () => stepIncline(-INC_STEP);
 $("wIncPlus").onclick  = () => stepIncline(+INC_STEP);
-$("wPause").onclick    = pauseBelt;
-$("wStop").onclick     = stopBelt;
+$("wDisconnect").onclick = () => {
+  if (S.previewMode) {
+    stopPreviewMode();
+    exitWorkoutView();
+    return;
+  }
+  // Aus Workout zurück + Verbindung trennen
+  if (S.connected) {
+    if (!confirm("Workout beenden und Verbindung trennen?\n\nDas Laufband läuft weiter — zum Anhalten den roten Stop-Knopf am Laufband drücken.")) return;
+    disconnect();
+  }
+  exitWorkoutView();
+};
 $("wBig").onclick      = enterBigMode;
-$("btnExitWorkoutPortrait").onclick = exitWorkoutView;
+$("btnExitWorkoutPortrait").onclick = () => {
+  if (S.previewMode) stopPreviewMode();
+  exitWorkoutView();
+};
+
+// Schnelltasten im Workout-Bildschirm
+document.querySelectorAll("#wSpdQuick button").forEach(btn => {
+  btn.onclick = () => queueSpeed(parseFloat(btn.dataset.spd));
+});
+document.querySelectorAll("#wIncQuick button").forEach(btn => {
+  btn.onclick = () => queueIncline(parseFloat(btn.dataset.inc));
+});
 
 // Großmodus-Buttons
 $("bigMinus").onclick   = () => stepSpeed(-SPEED_STEP);
@@ -1781,7 +1860,48 @@ $("bigPlus").onclick    = () => stepSpeed(+SPEED_STEP);
 $("bigStart").onclick   = startBelt;
 $("bigExit").onclick    = exitBigMode;
 
-// Init bei Seitenladung
+// =============================================================
+//  Vorschau-Modus für UI-Tests (keine echte Verbindung)
+// =============================================================
+let previewTimer = null;
+
+function startPreviewMode() {
+  S.previewMode = true;
+  // Demo-Werte setzen
+  S.istSpeed   = 7.5;
+  S.istIncline = 2.0;
+  S.istWatts   = 87;
+  S.workoutSeconds = 754;       // 12:34
+  S.workoutMeters  = 154000;    // Roh-Counter
+  S.speed = S.incline = 0;
+  // Telemetrie simulieren — sekündlich
+  if (previewTimer) clearInterval(previewTimer);
+  previewTimer = setInterval(() => {
+    if (!S.previewMode) return;
+    S.workoutSeconds++;
+    // Speed minimal wackeln um Lebendigkeit zu zeigen
+    S.istSpeed = 7.5 + (Math.random() - 0.5) * 0.06;
+    S.workoutMeters += Math.round(S.istSpeed * 5);
+    renderWorkoutView();
+    renderBig();
+  }, 1000);
+
+  showView("Workout");
+  log("👁 Vorschau-Modus aktiv (keine echte Verbindung)", "l-sys");
+}
+function stopPreviewMode() {
+  S.previewMode = false;
+  if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+  // State zurücksetzen
+  S.istSpeed = S.istIncline = S.istWatts = null;
+  S.workoutSeconds = S.workoutMeters = null;
+  renderWorkoutView();
+  renderBig();
+}
+
+$("btnPreview").onclick = startPreviewMode;
+
+// Web-Bluetooth-Verfügbarkeit prüfen
 if (!navigator.bluetooth) {
   $("ctxWarn").style.display = "block";
 }
