@@ -273,7 +273,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.7</div>
+  <div class="ver">v1.8</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -371,15 +371,15 @@
       <span><span class="live-val" id="istWatts">—</span><span class="live-unit">Watt</span></span>
     </div>
 
-    <!-- Workout-Tracking: Zeit und Distanz, lokal berechnet -->
+    <!-- Workout-Tracking: Zeit und Strecke direkt aus den Telemetrie-Paketen der Konsole -->
     <div class="workout-panel">
       <div class="live-box" id="workoutTimeBox">
-        <span class="live-label">⏱ Laufzeit</span>
-        <span class="live-val" id="workoutTime">0:00</span>
+        <span class="live-label">⏱ Laufzeit (Konsole)</span>
+        <span class="live-val" id="workoutTime">—</span>
       </div>
       <div class="live-box" id="workoutDistBox">
-        <span class="live-label">📏 Strecke</span>
-        <span class="live-val" id="workoutDist">0 m</span>
+        <span class="live-label">📏 Strecken-Zähler</span>
+        <span class="live-val" id="workoutDist">—</span>
       </div>
     </div>
 
@@ -390,10 +390,12 @@
       wenn ein Update reinkommt.<br>
       <b>Speed</b> 1–16 km/h — unter 1 km/h gibt es keine Laufgeschwindigkeit,
       ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Strecke und Zeit</b> werden lokal aus der Live-Geschwindigkeit
-      berechnet — wenn das Band länger als 3 Sekunden steht und dann wieder
-      anläuft (z.B. nach physischem Stop+Start am Laufband), wird der Zähler
-      automatisch zurückgesetzt, damit's mit der Konsole synchron bleibt.
+      <b>Laufzeit und Strecken-Zähler</b> kommen direkt aus den Telemetrie-Paketen
+      der Konsole (experimentell). Die Laufzeit sollte in Sekunden synchron mit
+      dem Laufband-Display laufen. Der Strecken-Zähler ist aktuell ein
+      <b>Roh-Wert</b> aus dem Paket — die Einheit (Meter? Encoder-Ticks?) müssen
+      wir nach einem ersten Test verifizieren. Im Protokoll-Panel werden die
+      relevanten Bytes mit ausgegeben (Zeile beginnt mit <code>⚙ telem</code>).
     </div>
   </div>
 </div>
@@ -628,24 +630,21 @@ const S = {
   lastUserTargetIncline: null,
   lastUserTargetInclineTime: null,
 
-  // Workout-Tracking (lokal berechnet, wie in QZ)
-  workoutStart: null,        // ms-Timestamp ab dem ersten echten Speed > 0
-  workoutLastTick: null,     // ms-Timestamp des letzten Distanz-Updates
-  workoutLastActive: null,   // ms-Timestamp des letzten Speed>0 (für Pause-Detection)
-  workoutSeconds: 0,         // gesamte Laufzeit in s (ohne Stillstand)
-  workoutMeters: 0,          // zurückgelegte Strecke in m
-  workoutTimer: null,        // setInterval-Handle für die Uhr
+  // Workout-Stats direkt aus den Telemetrie-Paketen der Konsole gelesen.
+  // Bytes 24-25 LE des reassemblierten Pakets = Workout-Sekunden (Hypothese
+  // aus iFIT 0x2f-Sniff). Distance/Kalorien sind Kandidaten-Felder, deren
+  // genaue Einheit wir noch verifizieren.
+  workoutSeconds: null,
+  workoutMeters:  null,
+  workoutKcal:    null,
+
+  // Multi-Fragment-Buffer (ein Telemetrie-Paket kommt in 3 BLE-Notifications)
+  fragBuf: null,
 
   busy: false,
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
-
-// Auto-Reset: wenn das Band länger als diese Schwelle still steht und dann
-// wieder anläuft (typisch: physischer Stop+Start am Laufband), wird die
-// lokale Workout-Anzeige (Zeit + Strecke) auf 0 zurückgesetzt, damit sie
-// synchron mit der Laufband-Konsole bleibt.
-const PAUSE_RESET_MS = 3000;   // 3 Sekunden Stillstand = Pause-Erkennung
 
 // Nach einer App-Eingabe (Stepper +/- oder Schnelltaste) halten wir den
 // User-Zielwert in der grossen SOLL-Anzeige für diese Dauer fest. Danach
@@ -703,56 +702,88 @@ function onNotify(ev) {
   log(`« ${toHex(arr)}`, "l-rx");
 
   // -----------------------------------------------------------------
-  // Telemetrie-Parsing nach QZ-Formel (proformtreadmill.cpp ~Zeile 3756)
-  // Paketformat: 00 12 01 04 02 2e 04 2e 02 02 [SPD_LO] [SPD_HI]
-  //              [INC_LO] [INC_HI] [W_LO] [W_HI] ...
-  //   Speed   = (byte11<<8 | byte10) / 100      km/h
-  //   Incline = signed16(byte13<<8 | byte12) / 100   %
-  //   Watts   = (byte15<<8 | byte14)
+  // Multi-Fragment-Reassembly:
+  // Ein Telemetrie-Paket wird über mehrere BLE-Notifications gesplittet:
+  //   Fragment 1:  00 12 [Payload...]   (Start)
+  //   Fragment 2:  01 12 [Payload...]   (Mitte)
+  //   Fragment 3:  ff XX [Payload...]   (Ende)
+  // Jedes Fragment ist 20 Bytes lang (BLE-MTU). Wir strippen die ersten 2
+  // Bytes (Fragment-Header) und hängen die Payloads aneinander.
   // -----------------------------------------------------------------
-  if (arr.length >= 16 &&
-      arr[0] === 0x00 && arr[1] === 0x12 &&
-      arr[4] === 0x02 && arr[5] === 0x2e) {
-    const spd  = ((arr[11] << 8) | arr[10]) / 100;
-    let inc16  = (arr[13] << 8) | arr[12];
-    if (inc16 & 0x8000) inc16 -= 0x10000; // sign-extend (incline kann negativ sein)
-    const inc  = inc16 / 100;
-    const watt = (arr[15] << 8) | arr[14];
-    S.istSpeed   = spd;
-    S.istIncline = inc;
-    S.istWatts   = watt;
-
-    // Workout-Distanz lokal integrieren (wie in QZ:
-    //   Distance += (Speed/3600000) * msecsSinceLastUpdate )
-    const now = Date.now();
-    if (spd > 0) {
-      // Auto-Reset: war das Band länger als PAUSE_RESET_MS still und läuft
-      // jetzt wieder? → vermutlich physischer Stop+Start am Laufband →
-      // Workout-Zähler zurücksetzen, damit's mit der Konsole synchron bleibt.
-      if (S.workoutLastActive !== null &&
-          (now - S.workoutLastActive) > PAUSE_RESET_MS) {
-        const pauseDur = Math.round((now - S.workoutLastActive) / 1000);
-        S.workoutSeconds = 0;
-        S.workoutMeters  = 0;
-        S.workoutStart   = now;
-        log(`↻ ${pauseDur}s Stillstand erkannt — Strecke/Zeit zurückgesetzt`, "l-ok");
-      }
-      if (S.workoutStart === null) S.workoutStart = now;
-      if (S.workoutLastTick !== null) {
-        const dtMs = now - S.workoutLastTick;
-        S.workoutMeters += (spd / 3.6) * (dtMs / 1000);
-      }
-      S.workoutLastTick   = now;
-      S.workoutLastActive = now;
-    } else {
-      // Stillstand: Distanz-Integration pausiert
-      S.workoutLastTick = null;
-      // workoutLastActive bleibt erhalten — für Pause-Erkennung beim Wiederanlauf
+  if (arr.length < 2) return;
+  const fragHi = arr[0];
+  if (fragHi === 0x00 && arr[1] === 0x12) {
+    // Start eines neuen Pakets
+    S.fragBuf = arr.slice(2);
+  } else if ((fragHi === 0x01 || fragHi === 0xff) && S.fragBuf !== null) {
+    // Fortsetzung oder Ende
+    S.fragBuf = S.fragBuf.concat(arr.slice(2));
+    if (fragHi === 0xff) {
+      parseTelemetryPacket(S.fragBuf);
+      S.fragBuf = null;
     }
-    renderIst();
-    renderWorkout();
-    renderValues();   // SOLL-Anzeige ggf. auf Live-Wert nachziehen (Hold-Frist abgelaufen oder noch nie eingestellt)
   }
+  // Andere Notifications (Status, Echo etc.) ignorieren wir hier
+}
+
+// Reassembliertes Telemetrie-Paket parsen. Wir interessieren uns nur für die
+// "Workout-State"-Pakete: erkennbar an den Bytes 0-5 = 01 04 02 [LEN] 04 [LEN]
+// und [LEN] in {0x2e, 0x2f} (verschiedene Konsole-Modi).
+function parseTelemetryPacket(p) {
+  if (p.length < 16) return;
+  if (p[0] !== 0x01 || p[1] !== 0x04 || p[2] !== 0x02) return;
+  const len = p[3];
+  if (len !== 0x2e && len !== 0x2f && len !== 0x23) return;
+
+  // ---- Speed / Incline / Watts (gleich wie bisher, aus erstem Fragment) ----
+  // Position in reassembled stream: bytes 8-15
+  //   Bytes 8-9   : Speed × 100 (LE, vermutlich Soll-Speed)
+  //   Bytes 12-13 : zweiter Speed-Wert × 100 (LE, vermutlich Ist-Speed) bzw. Incline
+  //   Bytes 14-15 : Watts (LE)
+  // Im 0x2e-Format (was wir empfangen) ist die genaue Bedeutung noch nicht
+  // 100% verifiziert — wir lesen weiterhin nach QZ-Schema.
+  const spd  = ((p[9]  << 8) | p[8])  / 100;
+  let inc16  = (p[11] << 8) | p[10];
+  if (inc16 & 0x8000) inc16 -= 0x10000;
+  const inc  = inc16 / 100;
+  const watt = (p[13] << 8) | p[12];
+  S.istSpeed   = spd;
+  S.istIncline = inc;
+  S.istWatts   = watt;
+
+  // ---- Workout-Daten aus dem Paket (Kandidaten, aus iFIT 0x2f-Analyse) ----
+  // Bytes 24-25 (LE 16-bit) = Workout-Sekunden  ← verifiziert in iFIT-Sniff
+  // Bytes 26-28 (LE 24-bit) = Kumulativer Counter (Distanz? Energie?)
+  //                            ← Einheit noch nicht klar
+  let workSec  = null;
+  let workCum  = null;
+  if (p.length >= 30) {
+    workSec = (p[23] << 8) | p[22];
+    workCum = (p[26] << 16) | (p[25] << 8) | p[24];
+  }
+
+  // Plausibilitäts-Check: Workout-Sekunden nur übernehmen wenn der Wert
+  // realistisch ist (< 8 Stunden = 28800s). Bei nicht-Workout-Paketen sind
+  // diese Bytes oft 0xff oder Müll.
+  if (workSec !== null && workSec < 28800) {
+    S.workoutSeconds = workSec;
+  }
+  // Kumulativer Counter: noch nicht in echte Strecke umgerechnet.
+  // Wir geben ihn als "Roh-Counter" aus, damit wir im Test sehen, wie er sich
+  // verhält. Sobald die Einheit klar ist, hier die Konvertierung einbauen.
+  if (workCum !== null && workCum < 0xffffff) {
+    S.workoutMeters = workCum;   // Roh-Counter, NICHT Meter — Konvertierung später
+  }
+
+  // Diagnose: einmal pro Telemetrie-Paket einen kompakten Hex-Dump der
+  // "interessanten" Bytes loggen, damit wir bei einem echten Workout sehen
+  // können, welche Felder sich wie verhalten.
+  const diagBytes = p.slice(16, 32).map(b => b.toString(16).padStart(2,"0")).join(" ");
+  log(`  ⚙ telem[16..31] = ${diagBytes}  · sec=${workSec} cum=${workCum}`, "l-sys");
+
+  renderIst();
+  renderWorkout();
+  renderValues();
 }
 
 // =============================================================
@@ -820,20 +851,15 @@ function cleanup() {
 }
 
 // =============================================================
-//  Workout-Tracking (Distanz, Laufzeit) — lokal berechnet wie QZ
+//  Workout-Stats — kommen jetzt direkt aus den Telemetrie-Paketen
+//  der Konsole (siehe parseTelemetryPacket). resetWorkout() setzt
+//  nur die Anzeige-Werte zurück, falls die Verbindung getrennt wird.
 // =============================================================
 function resetWorkout() {
-  if (S.workoutTimer) { clearInterval(S.workoutTimer); S.workoutTimer = null; }
-  S.workoutStart      = null;
-  S.workoutLastTick   = null;
-  S.workoutLastActive = null;
-  S.workoutSeconds    = 0;
-  S.workoutMeters     = 0;
-}
-function tickWorkoutClock() {
-  // Sekunden-Uhr, läuft solange Band > 0 km/h
-  if (S.istSpeed && S.istSpeed > 0) S.workoutSeconds++;
-  renderWorkout();
+  S.workoutSeconds = null;
+  S.workoutMeters  = null;
+  S.workoutKcal    = null;
+  S.fragBuf        = null;
 }
 
 async function disconnect() {
@@ -859,8 +885,6 @@ async function runInit() {
     S.inited = true;
     log("Init abgeschlossen. Poll-Schleife startet.", "l-ok");
     startPoll();
-    // Workout-Sekundenuhr läuft ab jetzt — zählt nur, wenn das Band läuft
-    if (!S.workoutTimer) S.workoutTimer = setInterval(tickWorkoutClock, 1000);
   } catch (e) {
     log("Init-Fehler: " + e.message, "l-err");
   }
@@ -973,18 +997,11 @@ function stepIncline(d) {
 function startBelt() {
   if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
   S.reqStart = true;
-  // Neues Workout: Distanz + Zeit zurücksetzen (Uhr läuft schon)
-  S.workoutSeconds    = 0;
-  S.workoutMeters     = 0;
-  S.workoutStart      = null;
-  S.workoutLastTick   = null;
-  S.workoutLastActive = null;
   // Alte User-Zielwerte löschen — die Anzeige soll dem Band folgen (das startet auf 2.0).
   S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
   S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
-  renderWorkout();
   renderValues();
-  log("Start angefordert — Workout-Tracking zurückgesetzt.", "l-sys");
+  log("Start angefordert.", "l-sys");
 }
 function parseSeq(elId, label) {
   return $(elId).value.split(/\n+/)
@@ -1151,19 +1168,28 @@ function flashIfChanged(valId, boxId, newTxt) {
   }
 }
 function renderWorkout() {
-  // Zeit als mm:ss bei <1h, sonst hh:mm:ss
-  const s = S.workoutSeconds;
-  const hh = Math.floor(s / 3600);
-  const mm = Math.floor((s % 3600) / 60);
-  const ss = s % 60;
-  const timeTxt = hh > 0
-    ? `${hh}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`
-    : `${mm}:${String(ss).padStart(2,"0")}`;
-  // Distanz: m bis 1000, ab dann km mit 2 Nachkommastellen
-  const m = S.workoutMeters;
-  const distTxt = m < 1000
-    ? `${m.toFixed(0)} m`
-    : `${(m/1000).toFixed(2)} km`;
+  // Werte kommen direkt aus den Telemetrie-Paketen der Konsole.
+  // Solange noch kein Paket angekommen ist → "—" anzeigen.
+  let timeTxt, distTxt;
+  if (S.workoutSeconds === null) {
+    timeTxt = "—";
+  } else {
+    const s = S.workoutSeconds;
+    const hh = Math.floor(s / 3600);
+    const mm = Math.floor((s % 3600) / 60);
+    const ss = s % 60;
+    timeTxt = hh > 0
+      ? `${hh}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`
+      : `${mm}:${String(ss).padStart(2,"0")}`;
+  }
+  if (S.workoutMeters === null) {
+    distTxt = "—";
+  } else {
+    // S.workoutMeters ist aktuell ein ROH-COUNTER aus dem Paket — die echte
+    // Einheit ist noch nicht geklärt. Wir zeigen ihn als Zahl an, damit man
+    // beim Test sehen kann, wie er sich verhält.
+    distTxt = S.workoutMeters.toString();
+  }
   flashIfChanged("workoutTime", "workoutTimeBox", timeTxt);
   flashIfChanged("workoutDist", "workoutDistBox", distTxt);
 }
