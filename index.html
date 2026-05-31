@@ -197,6 +197,54 @@
   .live-box.flash .live-val { color: #fff; transition: color 0s; }
   .live-box.stale .live-val { color: var(--ink-dim); }
 
+  /* Schnelltasten unter den Steppern */
+  .quick-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .quick-row button {
+    flex: 1;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 0;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: .03em;
+    transition: all 0.15s;
+  }
+  .quick-row button:hover:not(:disabled) {
+    border-color: var(--amber-dk);
+    color: var(--amber);
+  }
+  .quick-row button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* Workout-Statistik (Zeit + Distanz, große grüne Anzeige) */
+  .workout-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .workout-panel .live-box {
+    margin-top: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 12px;
+  }
+  .workout-panel .live-label {
+    margin-bottom: 4px;
+  }
+  .workout-panel .live-val {
+    font-size: 28px;
+  }
+
   /* log */
   #log {
     background: #0a0b07; border: 1px solid var(--line);
@@ -225,7 +273,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.5</div>
+  <div class="ver">v1.6</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -288,6 +336,13 @@
       <div class="val"><span class="big" id="spdVal">0.0</span><span class="unit">SOLL · KM/H</span></div>
       <button id="spdPlus" disabled>+</button>
     </div>
+    <div class="quick-row">
+      <button class="quick-spd" data-spd="3"  disabled>3</button>
+      <button class="quick-spd" data-spd="5"  disabled>5</button>
+      <button class="quick-spd" data-spd="8"  disabled>8</button>
+      <button class="quick-spd" data-spd="10" disabled>10</button>
+      <button class="quick-spd" data-spd="12" disabled>12</button>
+    </div>
     <div class="live-box" id="istSpdBox">
       <span class="live-label">▶ Live vom Laufband</span>
       <span><span class="live-val" id="istSpd">—</span><span class="live-unit">km/h</span></span>
@@ -299,6 +354,13 @@
       <div class="val"><span class="big" id="incVal">0.0</span><span class="unit">SOLL · PROZENT</span></div>
       <button id="incPlus" disabled>+</button>
     </div>
+    <div class="quick-row">
+      <button class="quick-inc" data-inc="0" disabled>0 %</button>
+      <button class="quick-inc" data-inc="2" disabled>2 %</button>
+      <button class="quick-inc" data-inc="4" disabled>4 %</button>
+      <button class="quick-inc" data-inc="6" disabled>6 %</button>
+      <button class="quick-inc" data-inc="8" disabled>8 %</button>
+    </div>
     <div class="live-box" id="istIncBox">
       <span class="live-label">▶ Live vom Laufband</span>
       <span><span class="live-val" id="istInc">—</span><span class="live-unit">%</span></span>
@@ -307,6 +369,18 @@
     <div class="live-box" id="istWattsBox" style="margin-top:8px">
       <span class="live-label">▶ Leistung live</span>
       <span><span class="live-val" id="istWatts">—</span><span class="live-unit">Watt</span></span>
+    </div>
+
+    <!-- Workout-Tracking: Zeit und Distanz, lokal berechnet -->
+    <div class="workout-panel">
+      <div class="live-box" id="workoutTimeBox">
+        <span class="live-label">⏱ Laufzeit</span>
+        <span class="live-val" id="workoutTime">0:00</span>
+      </div>
+      <div class="live-box" id="workoutDistBox">
+        <span class="live-label">📏 Strecke</span>
+        <span class="live-val" id="workoutDist">0 m</span>
+      </div>
     </div>
 
     <div class="mini">
@@ -377,12 +451,45 @@ ff 0d 02 04 02 09 04 09 02 02 00 10 01 00 22 00 00 00 00 00</textarea>
 
 <script>
 "use strict";
-/* ============================================================
+/* =============================================================================
    NordicTrack T6.5S — BLE Steuer-Prototyp
-   Protokoll rekonstruiert aus QZ (qdomyos-zwift), Klasse
-   proformtreadmill, Profile nordictrack_t65s_treadmill (v81)
-   und nordictrack_t65s_83_treadmill (v83).
-   ============================================================ */
+   =============================================================================
+   ARCHITEKTUR (in dieser Reihenfolge im Code):
+
+   1. PROTOKOLL-SCHICHT  (portierbar zu Kotlin/Swift/...)
+      • GATT UUIDs (Service + Write/Notify Characteristics)
+      • Timing-Konstanten (Init-Delay, Poll-Tick, Pair-Gap)
+      • Hex-Helfer
+      • Init-Sequenzen (v81 / v83 Profile, aus QZ btinit() rekonstruiert)
+      • Start-Sequenz (aus echtem iFIT-BLE-Sniff)
+      • Poll-Pakete (Keep-alive)
+      • Speed/Incline Frame-Builder (mit Checksumme)
+
+   2. ZUSTAND
+      • BLE-Handles, Profil, Poll-Timer
+      • Soll-Werte (vom User) vs. IST-Werte (von Konsole-Notifications)
+      • Workout-Tracking (Distanz/Zeit, lokal berechnet wie QZ)
+
+   3. BLE LOW-LEVEL
+      • pickWriteMode, bleWrite (auto WithResponse / WithoutResponse)
+      • onNotify: parst Telemetrie-Paket (Format 00 12 01 04 02 2e 04 2e ...)
+
+   4. VERBINDEN / TRENNEN / INIT  (Lebenszyklus)
+
+   5. POLL-SCHLEIFE  (zyklisch Keep-alive + Soll-Werte anwenden)
+
+   6. STEUER-AKTIONEN  (Start / Pause / Stop / Speed-Setzen)
+
+   7. UI  (Buttons, Stepper, Live-Boxen, Render-Funktionen)
+
+   Protokoll rekonstruiert aus QZ (qdomyos-zwift, Klasse proformtreadmill,
+   Profile nordictrack_t65s_treadmill v81 und nordictrack_t65s_83_treadmill v83)
+   ergänzt um Erkenntnisse aus eigenen iFIT-BLE-Sniffs (Start-Sequenz, Telemetrie).
+   ============================================================================= */
+
+// =============================================================
+// 1) PROTOKOLL-SCHICHT
+// =============================================================
 
 // --- GATT UUIDs (Nordic-basierter proprietärer Service) -------
 const SVC    = "00001533-1412-efde-1523-785feabcd123";
@@ -491,23 +598,35 @@ function buildSetFrame(cmd, value) {
 }
 
 // =============================================================
-//  Zustand
+// 2) ZUSTAND
 // =============================================================
 const S = {
+  // BLE
   device: null, server: null, wrChar: null, ntChar: null,
   connected: false, inited: false,
   profile: "v83",
+
+  // Poll-Schleife
   pollTimer: null, counter: 0,
-  reqSpeed: null, reqIncline: null, reqStart: false, reqStop: false,
+
+  // Soll-Werte (vom User angefordert)
+  reqSpeed: null, reqIncline: null, reqStart: false,
   speed: 0.0, incline: 0.0,
-  istSpeed: null, istIncline: null, istWatts: null,   // IST aus Telemetrie
+
+  // IST-Werte (aus Telemetrie-Notifications)
+  istSpeed: null, istIncline: null, istWatts: null,
+
+  // Workout-Tracking (lokal berechnet, wie in QZ)
+  workoutStart: null,        // ms-Timestamp ab dem ersten echten Speed > 0
+  workoutLastTick: null,     // ms-Timestamp des letzten Distanz-Updates
+  workoutSeconds: 0,         // gesamte Laufzeit in s (ohne Stillstand)
+  workoutMeters: 0,          // zurückgelegte Strecke in m
+  workoutTimer: null,        // setInterval-Handle für die Uhr
+
   busy: false,
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
-const RAMP_STEP = 1.0;   // km/h pro Rampen-Schritt
-const RAMP_TICK = 300;   // ms zwischen Rampen-Schritten
-const RAMP_FLOOR = 1.0;  // Mindest-Speed bevor Pause/Stop-Befehl folgt
 
 // =============================================================
 //  UI-Referenzen + Logging
@@ -525,7 +644,7 @@ function log(msg, cls) {
 }
 
 // =============================================================
-//  BLE Low-Level
+// 3) BLE LOW-LEVEL  (Write/Notify/Telemetrie-Parser)
 // =============================================================
 function pickWriteMode(ch) {
   // bevorzugt WithResponse, sonst WithoutResponse
@@ -558,11 +677,14 @@ function onNotify(ev) {
   for (let i = 0; i < dv.byteLength; i++) arr.push(dv.getUint8(i));
   log(`« ${toHex(arr)}`, "l-rx");
 
-  // Telemetrie-Parsing nach QZ-Formel (proformtreadmill.cpp Zeile ~3756):
-  // Format: 00 12 01 04 02 2e 04 2e 02 02 [SPD_LO] [SPD_HI] [INC_LO] [INC_HI] [W_LO] [W_HI] ...
+  // -----------------------------------------------------------------
+  // Telemetrie-Parsing nach QZ-Formel (proformtreadmill.cpp ~Zeile 3756)
+  // Paketformat: 00 12 01 04 02 2e 04 2e 02 02 [SPD_LO] [SPD_HI]
+  //              [INC_LO] [INC_HI] [W_LO] [W_HI] ...
   //   Speed   = (byte11<<8 | byte10) / 100      km/h
   //   Incline = signed16(byte13<<8 | byte12) / 100   %
   //   Watts   = (byte15<<8 | byte14)
+  // -----------------------------------------------------------------
   if (arr.length >= 16 &&
       arr[0] === 0x00 && arr[1] === 0x12 &&
       arr[4] === 0x02 && arr[5] === 0x2e) {
@@ -574,12 +696,28 @@ function onNotify(ev) {
     S.istSpeed   = spd;
     S.istIncline = inc;
     S.istWatts   = watt;
+
+    // Workout-Distanz lokal integrieren (wie in QZ:
+    //   Distance += (Speed/3600000) * msecsSinceLastUpdate )
+    const now = Date.now();
+    if (spd > 0) {
+      if (S.workoutStart === null) S.workoutStart = now;
+      if (S.workoutLastTick !== null) {
+        const dtMs = now - S.workoutLastTick;
+        S.workoutMeters += (spd / 3.6) * (dtMs / 1000);
+      }
+      S.workoutLastTick = now;
+    } else {
+      // Stillstand: Uhr pausiert, Distanz wächst nicht
+      S.workoutLastTick = null;
+    }
     renderIst();
+    renderWorkout();
   }
 }
 
 // =============================================================
-//  Verbinden
+// 4) VERBINDEN / TRENNEN / INIT  (Lebenszyklus)
 // =============================================================
 async function connect() {
   if (!navigator.bluetooth) { log("Web Bluetooth nicht verfügbar.", "l-err"); return; }
@@ -633,10 +771,27 @@ function onDisconnect() {
 function cleanup() {
   S.connected = S.inited = false;
   S.wrChar = S.ntChar = S.server = null;
-  S.reqSpeed = S.reqIncline = null; S.reqStart = S.reqStop = false;
+  S.reqSpeed = S.reqIncline = null; S.reqStart = false;
   S.speed = S.incline = 0; S.counter = 0;
   S.istSpeed = S.istIncline = S.istWatts = null;
-  renderValues(); renderIst();
+  resetWorkout();
+  renderValues(); renderIst(); renderWorkout();
+}
+
+// =============================================================
+//  Workout-Tracking (Distanz, Laufzeit) — lokal berechnet wie QZ
+// =============================================================
+function resetWorkout() {
+  if (S.workoutTimer) { clearInterval(S.workoutTimer); S.workoutTimer = null; }
+  S.workoutStart    = null;
+  S.workoutLastTick = null;
+  S.workoutSeconds  = 0;
+  S.workoutMeters   = 0;
+}
+function tickWorkoutClock() {
+  // Sekunden-Uhr, läuft solange Band > 0 km/h
+  if (S.istSpeed && S.istSpeed > 0) S.workoutSeconds++;
+  renderWorkout();
 }
 
 async function disconnect() {
@@ -648,9 +803,7 @@ async function disconnect() {
   log("Getrennt.", "l-sys");
 }
 
-// =============================================================
-//  Init-Sequenz
-// =============================================================
+// --- Init-Sequenz (Teil des Lebenszyklus) ---
 async function runInit() {
   if (!S.connected || S.busy) return;
   S.busy = true; refreshUI();
@@ -664,6 +817,8 @@ async function runInit() {
     S.inited = true;
     log("Init abgeschlossen. Poll-Schleife startet.", "l-ok");
     startPoll();
+    // Workout-Sekundenuhr läuft ab jetzt — zählt nur, wenn das Band läuft
+    if (!S.workoutTimer) S.workoutTimer = setInterval(tickWorkoutClock, 1000);
   } catch (e) {
     log("Init-Fehler: " + e.message, "l-err");
   }
@@ -671,7 +826,7 @@ async function runInit() {
 }
 
 // =============================================================
-//  Poll-Schleife  (Keep-alive + Anwenden der Sollwerte)
+// 5) POLL-SCHLEIFE  (zyklisch Keep-alive + Soll-Werte anwenden)
 // =============================================================
 function startPoll() {
   if (S.pollTimer) return;
@@ -724,10 +879,10 @@ async function pollTick() {
 }
 
 // =============================================================
-//  Aktionen
+// 6) STEUER-AKTIONEN  (Start / Pause / Stop / Speed-Setzen)
 // =============================================================
-function queueSpeed(v)   { S.reqSpeed = v;   log(`Speed angefordert: ${v.toFixed(1)}`, "l-sys"); }
-function queueIncline(v) { S.reqIncline = v; log(`Incline angefordert: ${v.toFixed(1)}`, "l-sys"); }
+function queueSpeed(v)   { S.reqSpeed = v;   renderValues(); log(`Speed angefordert: ${v.toFixed(1)}`, "l-sys"); }
+function queueIncline(v) { S.reqIncline = v; renderValues(); log(`Incline angefordert: ${v.toFixed(1)}`, "l-sys"); }
 
 function stepSpeed(d) {
   let base = S.reqSpeed !== null ? S.reqSpeed : S.speed;
@@ -748,16 +903,13 @@ function stepIncline(d) {
 function startBelt() {
   if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
   S.reqStart = true;
-  log("Start angefordert.", "l-sys");
-}
-function parseStopSeq() {
-  return $("stopSeq").value.split(/\n+/)
-    .map(l => l.trim()).filter(Boolean)
-    .map(line => {
-      const b = hx(line);
-      if (b.some(x => isNaN(x) || x < 0 || x > 255)) throw new Error("bad hex");
-      return b;
-    });
+  // Neues Workout: Distanz + Zeit zurücksetzen (Uhr läuft schon)
+  S.workoutSeconds = 0;
+  S.workoutMeters  = 0;
+  S.workoutStart   = null;
+  S.workoutLastTick = null;
+  renderWorkout();
+  log("Start angefordert — Workout-Tracking zurückgesetzt.", "l-sys");
 }
 function parseSeq(elId, label) {
   return $(elId).value.split(/\n+/)
@@ -771,29 +923,6 @@ function parseSeq(elId, label) {
 }
 function parseStopSeq() { return parseSeq("stopSeq", "Pause"); }
 function parseEndSeq()  { return parseSeq("endSeq",  "Stop"); }
-
-async function rampDownSpeed() {
-  // Geschwindigkeit in Schritten reduzieren bis RAMP_FLOOR, jeweils direkt
-  // als Set-Frame senden (außerhalb der Poll-Schleife, da die schon pausiert ist).
-  let cur = S.speed;
-  if (cur <= RAMP_FLOOR) {
-    log(`Bereits bei ${cur.toFixed(1)} km/h — keine Rampe nötig.`, "l-sys");
-    return;
-  }
-  log(`Rampe: ${cur.toFixed(1)} → ${RAMP_FLOOR.toFixed(1)} km/h…`, "l-sys");
-  while (cur > RAMP_FLOOR) {
-    cur = Math.max(RAMP_FLOOR, +(cur - RAMP_STEP).toFixed(1));
-    try {
-      await bleWritePair(buildSetFrame(0x01, cur), "ramp speed");
-      S.speed = cur; renderValues();
-    } catch (e) {
-      log("Rampen-Fehler: " + e.message, "l-err");
-      return;
-    }
-    await sleep(RAMP_TICK);
-  }
-  log(`Rampe fertig bei ${cur.toFixed(1)} km/h.`, "l-ok");
-}
 
 async function sendSequenceRaw(seq, tag) {
   // Caller manages stopPoll/startPoll
@@ -882,7 +1011,7 @@ async function sendRaw() {
 }
 
 // =============================================================
-//  UI-Rendering
+// 7) UI  (Buttons, Stepper, Live-Boxen, Render-Funktionen)
 // =============================================================
 function setStatus(state, txt) {
   const led = $("led");
@@ -914,6 +1043,23 @@ function flashIfChanged(valId, boxId, newTxt) {
     }
   }
 }
+function renderWorkout() {
+  // Zeit als mm:ss bei <1h, sonst hh:mm:ss
+  const s = S.workoutSeconds;
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const timeTxt = hh > 0
+    ? `${hh}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`
+    : `${mm}:${String(ss).padStart(2,"0")}`;
+  // Distanz: m bis 1000, ab dann km mit 2 Nachkommastellen
+  const m = S.workoutMeters;
+  const distTxt = m < 1000
+    ? `${m.toFixed(0)} m`
+    : `${(m/1000).toFixed(2)} km`;
+  flashIfChanged("workoutTime", "workoutTimeBox", timeTxt);
+  flashIfChanged("workoutDist", "workoutDistBox", distTxt);
+}
 function refreshUI() {
   const c = S.connected, ready = c && S.inited && !S.busy;
   $("btnConnect").disabled    = c || S.busy;
@@ -925,6 +1071,7 @@ function refreshUI() {
   $("btnDisconnectActive").disabled = !c;
   $("spdMinus").disabled = $("spdPlus").disabled = !ready;
   $("incMinus").disabled = $("incPlus").disabled = !ready;
+  document.querySelectorAll(".quick-spd, .quick-inc").forEach(b => b.disabled = !ready);
   $("btnRaw").disabled        = !c;
 }
 
@@ -942,6 +1089,13 @@ $("spdPlus").onclick   = () => stepSpeed(+SPEED_STEP);
 $("spdMinus").onclick  = () => stepSpeed(-SPEED_STEP);
 $("incPlus").onclick   = () => stepIncline(+INC_STEP);
 $("incMinus").onclick  = () => stepIncline(-INC_STEP);
+// Schnelltasten: Speed/Incline direkt auf Zielwert setzen
+document.querySelectorAll(".quick-spd").forEach(btn => {
+  btn.onclick = () => queueSpeed(parseFloat(btn.dataset.spd));
+});
+document.querySelectorAll(".quick-inc").forEach(btn => {
+  btn.onclick = () => queueIncline(parseFloat(btn.dataset.inc));
+});
 $("btnRaw").onclick    = sendRaw;
 $("btnClear").onclick  = () => logEl.innerHTML = "";
 
@@ -951,7 +1105,7 @@ if (!navigator.bluetooth) {
 }
 log("Prototyp geladen. 'Verbinden' antippen.", "l-sys");
 log("Reihenfolge: Verbinden → Init senden → Start → Speed/Incline.", "l-sys");
-refreshUI(); renderValues(); renderIst();
+refreshUI(); renderValues(); renderIst(); renderWorkout();
 </script>
 </body>
 </html>
