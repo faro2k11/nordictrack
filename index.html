@@ -141,6 +141,61 @@
 
   .mini { font-size: 11px; color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
   .mini b { color: var(--ink); font-weight: 600; }
+  .warn-box {
+    background: rgba(255, 180, 50, 0.10);
+    border: 1px solid rgba(255, 180, 50, 0.45);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ink);
+    margin: 10px 0 16px;
+  }
+  .warn-box b { color: #f4a52a; }
+  .ist-line {
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-top: 6px;
+    text-align: center;
+    letter-spacing: .02em;
+  }
+  .ist-line b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Prominente Live-Anzeige (IST-Werte vom Laufband) */
+  .live-box {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(116, 196, 107, 0.07);
+    border: 1px solid rgba(116, 196, 107, 0.35);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .live-box .live-label {
+    font-size: 10px;
+    color: rgba(116, 196, 107, 0.85);
+    letter-spacing: .15em;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex: 1;
+  }
+  .live-box .live-val {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    transition: color 0.4s;
+  }
+  .live-box .live-unit {
+    font-size: 10px;
+    color: var(--ink-dim);
+    margin-left: 6px;
+    letter-spacing: .1em;
+  }
+  .live-box.flash .live-val { color: #fff; transition: color 0s; }
+  .live-box.stale .live-val { color: var(--ink-dim); }
 
   /* log */
   #log {
@@ -170,7 +225,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.4</div>
+  <div class="ver">v1.5</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -211,34 +266,56 @@
   <div class="panel-b">
     <div class="row" style="margin-bottom:14px">
       <button class="go" id="btnStart" disabled>▶ Start</button>
-      <button class="warn-b" id="btnPause" disabled>❚❚ Pause</button>
-      <button class="danger" id="btnStop" disabled>■ Stop</button>
+      <button class="warn-b" id="btnPause" disabled>❚❚ Pause&nbsp;(App)</button>
+      <button class="danger" id="btnStop" disabled>■ Workout-Ende&nbsp;(App)</button>
     </div>
     <button id="btnDisconnectActive" class="danger" disabled style="width:100%;margin-bottom:6px">
       ⏏ Verbindung trennen (Workout abbrechen)
     </button>
 
+    <div class="warn-box">
+      <b>⚠ Wichtig:</b> Pause und Workout-Ende signalisieren der Konsole nur den
+      Workout-Übergang — das Laufband <b>bremst dadurch nicht physisch ab</b>.
+      Zum Anhalten den <b>roten Stop-Knopf am Laufband</b> drücken. (Die iFIT-App
+      schafft das Anhalten vermutlich über einen zusätzlichen, nicht über BLE
+      sichtbaren Cloud-/Auth-Mechanismus, der mit reinem BLE-Reverse-Engineering
+      nicht reproduzierbar ist.)
+    </div>
+
     <label class="fld">Geschwindigkeit</label>
     <div class="stepper">
       <button id="spdMinus" disabled>−</button>
-      <div class="val"><span class="big" id="spdVal">0.0</span><span class="unit">KM/H</span></div>
+      <div class="val"><span class="big" id="spdVal">0.0</span><span class="unit">SOLL · KM/H</span></div>
       <button id="spdPlus" disabled>+</button>
+    </div>
+    <div class="live-box" id="istSpdBox">
+      <span class="live-label">▶ Live vom Laufband</span>
+      <span><span class="live-val" id="istSpd">—</span><span class="live-unit">km/h</span></span>
     </div>
 
     <label class="fld" style="margin-top:14px">Steigung</label>
     <div class="stepper">
       <button id="incMinus" disabled>−</button>
-      <div class="val"><span class="big" id="incVal">0.0</span><span class="unit">PROZENT</span></div>
+      <div class="val"><span class="big" id="incVal">0.0</span><span class="unit">SOLL · PROZENT</span></div>
       <button id="incPlus" disabled>+</button>
+    </div>
+    <div class="live-box" id="istIncBox">
+      <span class="live-label">▶ Live vom Laufband</span>
+      <span><span class="live-val" id="istInc">—</span><span class="live-unit">%</span></span>
+    </div>
+
+    <div class="live-box" id="istWattsBox" style="margin-top:8px">
+      <span class="live-label">▶ Leistung live</span>
+      <span><span class="live-val" id="istWatts">—</span><span class="live-unit">Watt</span></span>
     </div>
 
     <div class="mini">
-      Sollwerte laufen über die Poll-Schleife (wie in QZ). <b>Speed</b> 1–16 km/h
-      — unter 1 km/h gibt es keine Laufgeschwindigkeit, ein Schritt nach unten löst
-      darum <b>Pause</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Pause</b> und <b>Stop</b> senden den Halt-Befehl sofort (wie iFIT) — die
-      Laufband-Firmware bremst dann intern. Verbindung bleibt in beiden Fällen.<br>
-      <b>Verbindung trennen</b> ist separat unten — beendet die BLE-Session.
+      <b>Sollwerte</b> (grosse Bernsteinzahlen) sind das, was du anforderst —
+      laufen über die Poll-Schleife (wie in QZ). <b>Live-Werte</b> (grün)
+      kommen aus den Telemetrie-Notifications der Konsole und blitzen kurz auf,
+      wenn ein Update reinkommt.<br>
+      <b>Speed</b> 1–16 km/h — unter 1 km/h gibt es keine Laufgeschwindigkeit,
+      ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.
     </div>
   </div>
 </div>
@@ -423,6 +500,7 @@ const S = {
   pollTimer: null, counter: 0,
   reqSpeed: null, reqIncline: null, reqStart: false, reqStop: false,
   speed: 0.0, incline: 0.0,
+  istSpeed: null, istIncline: null, istWatts: null,   // IST aus Telemetrie
   busy: false,
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
@@ -479,6 +557,25 @@ function onNotify(ev) {
   const arr = [];
   for (let i = 0; i < dv.byteLength; i++) arr.push(dv.getUint8(i));
   log(`« ${toHex(arr)}`, "l-rx");
+
+  // Telemetrie-Parsing nach QZ-Formel (proformtreadmill.cpp Zeile ~3756):
+  // Format: 00 12 01 04 02 2e 04 2e 02 02 [SPD_LO] [SPD_HI] [INC_LO] [INC_HI] [W_LO] [W_HI] ...
+  //   Speed   = (byte11<<8 | byte10) / 100      km/h
+  //   Incline = signed16(byte13<<8 | byte12) / 100   %
+  //   Watts   = (byte15<<8 | byte14)
+  if (arr.length >= 16 &&
+      arr[0] === 0x00 && arr[1] === 0x12 &&
+      arr[4] === 0x02 && arr[5] === 0x2e) {
+    const spd  = ((arr[11] << 8) | arr[10]) / 100;
+    let inc16  = (arr[13] << 8) | arr[12];
+    if (inc16 & 0x8000) inc16 -= 0x10000; // sign-extend (incline kann negativ sein)
+    const inc  = inc16 / 100;
+    const watt = (arr[15] << 8) | arr[14];
+    S.istSpeed   = spd;
+    S.istIncline = inc;
+    S.istWatts   = watt;
+    renderIst();
+  }
 }
 
 // =============================================================
@@ -538,7 +635,8 @@ function cleanup() {
   S.wrChar = S.ntChar = S.server = null;
   S.reqSpeed = S.reqIncline = null; S.reqStart = S.reqStop = false;
   S.speed = S.incline = 0; S.counter = 0;
-  renderValues();
+  S.istSpeed = S.istIncline = S.istWatts = null;
+  renderValues(); renderIst();
 }
 
 async function disconnect() {
@@ -797,6 +895,25 @@ function renderValues() {
   $("spdVal").textContent = sShown.toFixed(1);
   $("incVal").textContent = iShown.toFixed(1);
 }
+function renderIst() {
+  const newSpd = S.istSpeed   === null ? "—" : S.istSpeed.toFixed(2);
+  const newInc = S.istIncline === null ? "—" : S.istIncline.toFixed(1);
+  const newWat = S.istWatts   === null ? "—" : S.istWatts.toString();
+  flashIfChanged("istSpd",   "istSpdBox",   newSpd);
+  flashIfChanged("istInc",   "istIncBox",   newInc);
+  flashIfChanged("istWatts", "istWattsBox", newWat);
+}
+function flashIfChanged(valId, boxId, newTxt) {
+  const el  = $(valId);
+  const box = $(boxId);
+  if (el.textContent !== newTxt) {
+    el.textContent = newTxt;
+    if (box) {
+      box.classList.add("flash");
+      setTimeout(() => box.classList.remove("flash"), 80);
+    }
+  }
+}
 function refreshUI() {
   const c = S.connected, ready = c && S.inited && !S.busy;
   $("btnConnect").disabled    = c || S.busy;
@@ -834,7 +951,7 @@ if (!navigator.bluetooth) {
 }
 log("Prototyp geladen. 'Verbinden' antippen.", "l-sys");
 log("Reihenfolge: Verbinden → Init senden → Start → Speed/Incline.", "l-sys");
-refreshUI(); renderValues();
+refreshUI(); renderValues(); renderIst();
 </script>
 </body>
 </html>
