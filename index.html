@@ -308,26 +308,9 @@ html, body {
   flex: 1; min-height: 0;
 }
 .rings-section svg {
-  width: min(48vh, 100%); height: min(48vh, 100%);
-  max-width: 240px; max-height: 240px;
+  width: min(72vh, 100%); height: min(72vh, 100%);
+  max-width: 360px; max-height: 360px;
 }
-.rings-legend {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 6px; width: 100%; margin-top: 8px;
-}
-.rings-legend .item { text-align: center; }
-.rings-legend .lbl {
-  font-size: 8px; color: var(--ink-dim);
-  letter-spacing: 0.15em; text-transform: uppercase;
-  margin-bottom: 2px;
-}
-.rings-legend .vl {
-  font-size: 13px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.rings-legend .item.zeit .vl    { color: var(--ring-1); }
-.rings-legend .item.speed .vl   { color: var(--ring-2); }
-.rings-legend .item.strecke .vl { color: var(--ring-3); }
 
 /* MITTE-Spalte (Hero) */
 .w-center {
@@ -369,8 +352,22 @@ html, body {
   letter-spacing: 0.25em; text-transform: uppercase;
   display: block; margin-bottom: 2px; font-weight: 600;
 }
+.hero-distance {
+  margin-top: 8px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ring-3);
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.hero-distance .sub {
+  font-size: 9px; color: var(--ink-dim);
+  letter-spacing: 0.25em; text-transform: uppercase;
+  display: block; margin-bottom: 2px; font-weight: 600;
+}
 .secondary-bar {
-  margin-top: 14px;
+  margin-top: 12px;
   display: flex; gap: 24px;
   align-items: baseline;
 }
@@ -640,7 +637,7 @@ body.bigscreen .ver-corner { display: none; }
       <div class="title">T6.5S</div>
       <div class="sub">Workout-Steuerung via Bluetooth</div>
     </div>
-    <div class="ver-badge">v2.1</div>
+    <div class="ver-badge">v2.2</div>
   </div>
 
   <div class="ctx-warn" id="ctxWarn" style="display:none">
@@ -727,7 +724,7 @@ body.bigscreen .ver-corner { display: none; }
           <circle cx="110" cy="110" r="96" stroke="#2a0c14" stroke-width="14" fill="none"/>
           <circle cx="110" cy="110" r="74" stroke="#1b2806" stroke-width="14" fill="none"/>
           <circle cx="110" cy="110" r="52" stroke="#062231" stroke-width="14" fill="none"/>
-          <!-- Aktive Ringe (Dashoffset wird per JS gesetzt) -->
+          <!-- Aktive Ringe -->
           <circle id="ringTime" cx="110" cy="110" r="96" stroke="url(#g1)" stroke-width="14"
                   fill="none" stroke-linecap="round"
                   stroke-dasharray="603" stroke-dashoffset="603"
@@ -742,20 +739,6 @@ body.bigscreen .ver-corner { display: none; }
                   transform="rotate(-90 110 110)"/>
         </svg>
       </div>
-      <div class="rings-legend">
-        <div class="item zeit">
-          <div class="lbl">Zeit</div>
-          <div class="vl" id="wTime">—</div>
-        </div>
-        <div class="item speed">
-          <div class="lbl">Speed</div>
-          <div class="vl" id="wSpeedRing">—</div>
-        </div>
-        <div class="item strecke">
-          <div class="lbl">Strecke</div>
-          <div class="vl" id="wDist">—</div>
-        </div>
-      </div>
     </div>
 
     <!-- MITTE: Hero -->
@@ -766,6 +749,10 @@ body.bigscreen .ver-corner { display: none; }
       <div class="hero-time">
         <span class="sub">Laufzeit</span>
         <span id="wHeroTime">—</span>
+      </div>
+      <div class="hero-distance">
+        <span class="sub">Strecke</span>
+        <span id="wHeroDist">—</span>
       </div>
       <div class="secondary-bar">
         <div class="item watts">
@@ -856,7 +843,7 @@ body.bigscreen .ver-corner { display: none; }
   </div>
 </div>
 
-<div class="ver-corner">v2.1</div>
+<div class="ver-corner">v2.2</div>
 
 <script>
 "use strict";
@@ -1632,6 +1619,14 @@ const WORKOUT_GOAL_SEC = 30 * 60;
 const WORKOUT_GOAL_M   = 5000;
 const WORKOUT_MAX_SPD  = 12;
 
+// Konversionsfaktor: Roh-Counter → Meter.
+// Beobachtet im Workout-Log: ~4782 Ticks/Sekunde bei ca. 1.1 km/h.
+//   1.1 km/h = 0.3056 m/s → ein Tick ≈ 0.3056 / 4782 ≈ 6.39e-5 m
+// Anders ausgedrückt: ~15.640 Ticks pro Meter.
+// Das ist eine Schätzung; sobald wir eine echte Kalibrier-Messung haben,
+// hier den Faktor präzisieren.
+const COUNTER_TO_METERS = 1 / 15640;
+
 const RING_CIRC = { time: 603, speed: 465, dist: 327 };
 
 function renderWorkoutView() {
@@ -1661,25 +1656,23 @@ function renderWorkoutView() {
     const mm = Math.floor(s/60), ss = s%60;
     timeTxt = `${mm}:${String(ss).padStart(2,"0")}`;
   }
-  $("wTime").textContent     = timeTxt;
   $("wHeroTime").textContent = timeTxt;
 
-  // Speed-Anzeige im Legende-Block
-  $("wSpeedRing").textContent = sp.v.toFixed(1);
-
-  // Strecken-Wert: aktuell Roh-Counter (Konversion in Meter steht noch aus)
-  if (S.workoutMeters === null) {
-    $("wDist").textContent = "—";
-  } else {
-    // Roh-Counter — zeigen wir aktuell als kompakte Zahl
-    $("wDist").textContent = S.workoutMeters.toString();
+  // Strecke: Roh-Counter → Meter (über Schätzfaktor)
+  let distTxt = "—";
+  let distMeters = 0;
+  if (S.workoutMeters !== null) {
+    distMeters = S.workoutMeters * COUNTER_TO_METERS;
+    distTxt = distMeters < 1000
+      ? `${distMeters.toFixed(0)} m`
+      : `${(distMeters/1000).toFixed(2)} km`;
   }
+  $("wHeroDist").textContent = distTxt;
 
   // Ringe
   setRingProgress("ringTime",  RING_CIRC.time,  (S.workoutSeconds || 0) / WORKOUT_GOAL_SEC);
   setRingProgress("ringSpeed", RING_CIRC.speed, sp.v / WORKOUT_MAX_SPD);
-  // Strecken-Ring: solange Roh-Counter, zeigen wir den Counter / 100k als Annäherung
-  setRingProgress("ringDist",  RING_CIRC.dist,  (S.workoutMeters || 0) / 100000);
+  setRingProgress("ringDist",  RING_CIRC.dist,  distMeters / WORKOUT_GOAL_M);
 }
 function setRingProgress(elId, circ, frac) {
   const el = $(elId);
@@ -1867,21 +1860,22 @@ let previewTimer = null;
 
 function startPreviewMode() {
   S.previewMode = true;
-  // Demo-Werte setzen
+  // Demo-Werte setzen — Counter so dass die Strecke bei ca. 154 m losgeht
   S.istSpeed   = 7.5;
   S.istIncline = 2.0;
   S.istWatts   = 87;
-  S.workoutSeconds = 754;       // 12:34
-  S.workoutMeters  = 154000;    // Roh-Counter
+  S.workoutSeconds = 754;            // 12:34
+  S.workoutMeters  = 154 * 15640;    // ≈ 154 m über Konversionsfaktor
   S.speed = S.incline = 0;
   // Telemetrie simulieren — sekündlich
   if (previewTimer) clearInterval(previewTimer);
   previewTimer = setInterval(() => {
     if (!S.previewMode) return;
     S.workoutSeconds++;
-    // Speed minimal wackeln um Lebendigkeit zu zeigen
     S.istSpeed = 7.5 + (Math.random() - 0.5) * 0.06;
-    S.workoutMeters += Math.round(S.istSpeed * 5);
+    // Counter wächst mit Speed: ~15640 Ticks pro Meter, ~Speed m/s
+    const metersPerSec = S.istSpeed / 3.6;
+    S.workoutMeters += Math.round(metersPerSec * 15640);
     renderWorkoutView();
     renderBig();
   }, 1000);
