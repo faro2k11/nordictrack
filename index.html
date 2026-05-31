@@ -273,7 +273,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.8</div>
+  <div class="ver">v1.9</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -371,14 +371,14 @@
       <span><span class="live-val" id="istWatts">—</span><span class="live-unit">Watt</span></span>
     </div>
 
-    <!-- Workout-Tracking: Zeit und Strecke direkt aus den Telemetrie-Paketen der Konsole -->
+    <!-- Workout-Tracking: Werte direkt aus den Telemetrie-Paketen der Konsole -->
     <div class="workout-panel">
       <div class="live-box" id="workoutTimeBox">
         <span class="live-label">⏱ Laufzeit (Konsole)</span>
         <span class="live-val" id="workoutTime">—</span>
       </div>
       <div class="live-box" id="workoutDistBox">
-        <span class="live-label">📏 Strecken-Zähler</span>
+        <span class="live-label">📏 Counter (Roh)</span>
         <span class="live-val" id="workoutDist">—</span>
       </div>
     </div>
@@ -390,12 +390,11 @@
       wenn ein Update reinkommt.<br>
       <b>Speed</b> 1–16 km/h — unter 1 km/h gibt es keine Laufgeschwindigkeit,
       ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Laufzeit und Strecken-Zähler</b> kommen direkt aus den Telemetrie-Paketen
-      der Konsole (experimentell). Die Laufzeit sollte in Sekunden synchron mit
-      dem Laufband-Display laufen. Der Strecken-Zähler ist aktuell ein
-      <b>Roh-Wert</b> aus dem Paket — die Einheit (Meter? Encoder-Ticks?) müssen
-      wir nach einem ersten Test verifizieren. Im Protokoll-Panel werden die
-      relevanten Bytes mit ausgegeben (Zeile beginnt mit <code>⚙ telem</code>).
+      <b>Laufzeit</b> liest die Konsole aus Byte 25 des Telemetrie-Pakets —
+      springt automatisch auf 0 zurück, sobald du am Laufband Stop drückst.<br>
+      <b>Counter</b> ist ein Roh-Zähler (Bytes 29–31, ~4782 pro Sekunde bei
+      niedriger Geschwindigkeit) — vermutlich Motor-Encoder-Pulse. Müsste durch
+      eine Kalibrier-Messung in Meter umgerechnet werden, kann ich später bauen.
     </div>
   </div>
 </div>
@@ -751,35 +750,32 @@ function parseTelemetryPacket(p) {
   S.istIncline = inc;
   S.istWatts   = watt;
 
-  // ---- Workout-Daten aus dem Paket (Kandidaten, aus iFIT 0x2f-Analyse) ----
-  // Bytes 24-25 (LE 16-bit) = Workout-Sekunden  ← verifiziert in iFIT-Sniff
-  // Bytes 26-28 (LE 24-bit) = Kumulativer Counter (Distanz? Energie?)
-  //                            ← Einheit noch nicht klar
-  let workSec  = null;
-  let workCum  = null;
-  if (p.length >= 30) {
-    workSec = (p[23] << 8) | p[22];
-    workCum = (p[26] << 16) | (p[25] << 8) | p[24];
+  // ---- Workout-Daten aus dem Paket (verifiziert an echtem Workout-Log) ----
+  //   p[22]    = State-Flag (0x01=init, 0x02=läuft, 0x03=gestoppt)
+  //   p[25]    = Workout-Sekunden, LOW  byte (resettet bei Stop am Laufband)
+  //   p[26]    = Workout-Sekunden, HIGH byte (für Workouts > 4 min)
+  //   p[29..31]= 24-bit kumulativer Counter (resettet ebenfalls bei Stop)
+  //              Einheit unbekannt — wächst konstant ~4782/Sek bei ~1 km/h.
+  //              Wahrscheinlich Motor-Encoder-Pulse, müsste durch eine
+  //              Kalibrier-Messung in Meter umgerechnet werden.
+  let consoleSec = null;
+  let consoleCum = null;
+  if (p.length >= 32) {
+    consoleSec = p[25] | (p[26] << 8);
+    consoleCum = p[29] | (p[30] << 8) | (p[31] << 16);
   }
 
-  // Plausibilitäts-Check: Workout-Sekunden nur übernehmen wenn der Wert
-  // realistisch ist (< 8 Stunden = 28800s). Bei nicht-Workout-Paketen sind
-  // diese Bytes oft 0xff oder Müll.
-  if (workSec !== null && workSec < 28800) {
-    S.workoutSeconds = workSec;
+  // Plausibilität: nur übernehmen wenn < 8h (sonst ist's Müll-Bytes)
+  if (consoleSec !== null && consoleSec < 28800) {
+    S.workoutSeconds = consoleSec;
   }
-  // Kumulativer Counter: noch nicht in echte Strecke umgerechnet.
-  // Wir geben ihn als "Roh-Counter" aus, damit wir im Test sehen, wie er sich
-  // verhält. Sobald die Einheit klar ist, hier die Konvertierung einbauen.
-  if (workCum !== null && workCum < 0xffffff) {
-    S.workoutMeters = workCum;   // Roh-Counter, NICHT Meter — Konvertierung später
+  if (consoleCum !== null && consoleCum < 0xffffff) {
+    S.workoutMeters = consoleCum;   // immer noch Roh-Counter, kein Meter
   }
 
-  // Diagnose: einmal pro Telemetrie-Paket einen kompakten Hex-Dump der
-  // "interessanten" Bytes loggen, damit wir bei einem echten Workout sehen
-  // können, welche Felder sich wie verhalten.
-  const diagBytes = p.slice(16, 32).map(b => b.toString(16).padStart(2,"0")).join(" ");
-  log(`  ⚙ telem[16..31] = ${diagBytes}  · sec=${workSec} cum=${workCum}`, "l-sys");
+  // Diagnose: kompakter Hex-Dump der Workout-relevanten Bytes
+  const diag = p.slice(20, 32).map(b => b.toString(16).padStart(2,"0")).join(" ");
+  log(`  ⚙ telem[20..31]=${diag} · state=${p[22]} sec=${consoleSec} cnt=${consoleCum}`, "l-sys");
 
   renderIst();
   renderWorkout();
