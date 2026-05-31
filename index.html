@@ -2,457 +2,813 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0d0e0b">
-<title>T6.5S · BLE Steuer-Prototyp</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>T6.5S Workout</title>
 <style>
-  :root {
-    --bg:        #0d0e0b;
-    --panel:     #16180f;
-    --panel-2:   #1d2014;
-    --line:      #2c2f1d;
-    --ink:       #d8d6c4;
-    --ink-dim:   #7c7e63;
-    --amber:     #ffb627;
-    --amber-dk:  #c98410;
-    --green:     #74c46b;
-    --red:       #e0584a;
-    --blue:      #5fa8d6;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { background: var(--bg); }
-  body {
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    color: var(--ink);
-    min-height: 100dvh;
-    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
-    max-width: 560px; margin: 0 auto;
-    background-image:
-      repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
-  }
-  header {
-    border: 1px solid var(--line);
-    background: var(--panel);
-    padding: 12px 14px;
-    margin-bottom: 12px;
-    position: relative;
-  }
-  header::before {
-    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: var(--amber);
-  }
-  .ver {
-    position: absolute; top: 8px; right: 10px;
-    font-size: 9px; font-weight: 700; letter-spacing: .14em;
-    color: var(--amber); background: rgba(255,182,39,.08);
-    border: 1px solid var(--amber-dk);
-    padding: 2px 6px;
-  }
-  h1 { font-size: 15px; font-weight: 700; letter-spacing: .04em; padding-right: 60px; }
-  .sub { font-size: 11px; color: var(--ink-dim); margin-top: 3px; letter-spacing: .03em; }
+/* =============================================================================
+   T6.5S Workout-App — v2.0
+   ============================================================================= */
+:root {
+  --bg-0:     #000000;
+  --bg-1:     #0e0e10;
+  --bg-2:     #1c1c1f;
+  --bg-3:     #2a2a2f;
+  --line:     #2a2a2f;
+  --line-2:   #3a3a3f;
+  --ink:      #f5f5f7;
+  --ink-dim:  #86868b;
+  --ink-mute: #5a5a5f;
+  --ring-1:   #fa3567;
+  --ring-2:   #84db00;
+  --ring-3:   #00d6ff;
+  --accent:   #ff9500;
+  --accent-dk:#cc7700;
+  --red:      #ff453a;
+  --green:    #30d158;
+  --amber:    #ffd60a;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overscroll-behavior: none;
+}
 
-  .panel {
-    border: 1px solid var(--line);
-    background: var(--panel);
-    margin-bottom: 12px;
-  }
-  .panel-h {
-    font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--ink-dim);
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
-  }
-  .panel-b { padding: 12px; }
+/* ---- View-System: nur eine View ist gleichzeitig sichtbar ---- */
+.view { display: none; }
+.view.active { display: flex; }
 
-  /* status line */
-  .status {
-    display: flex; align-items: center; gap: 9px;
-    font-size: 12px; letter-spacing: .03em;
-  }
-  .led {
-    width: 11px; height: 11px; border-radius: 50%;
-    background: var(--red); flex: none;
-    box-shadow: 0 0 8px -1px var(--red);
-    transition: all .25s;
-  }
-  .led.on  { background: var(--green); box-shadow: 0 0 9px 0 var(--green); }
-  .led.wait{ background: var(--amber); box-shadow: 0 0 9px 0 var(--amber); animation: pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity: .35; } }
-  .dev-name { color: var(--amber); font-weight: 600; }
+/* =============================================================================
+   SETUP-VIEW (Hochformat, beim Verbinden/Init)
+   ============================================================================= */
+.view-setup {
+  flex-direction: column;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 14px 18px 24px;
+  gap: 16px;
+}
+.setup-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 8px 2px 6px;
+}
+.setup-header .title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.setup-header .sub   { font-size: 11px; color: var(--ink-dim); margin-top: 2px; letter-spacing: 0.05em; }
+.setup-header .ver-badge {
+  font-size: 9px; padding: 3px 7px;
+  background: var(--bg-2); border-radius: 999px;
+  color: var(--ink-mute); letter-spacing: 0.1em;
+}
 
-  label.fld { display: block; font-size: 11px; color: var(--ink-dim); margin-bottom: 5px; letter-spacing: .04em; }
+/* Karten */
+.card {
+  background: var(--bg-1);
+  border-radius: 18px;
+  padding: 16px 18px;
+}
+.card-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px; font-weight: 600;
+  color: var(--ink-dim);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.card-h .step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ink); font-weight: 700;
+  letter-spacing: 0;
+  margin-right: 8px;
+}
+.card-h .step-num.done { background: var(--green); color: #000; }
+.card-h .step-num.now  { background: var(--accent); color: #000; }
 
-  .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .row > * { flex: 1; }
+/* Buttons */
+.btn {
+  padding: 14px 16px;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  background: var(--bg-2);
+  color: var(--ink);
+  width: 100%;
+  transition: transform 0.1s, background 0.15s;
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn.primary {
+  background: var(--accent); color: #000;
+}
+.btn.primary:active:not(:disabled) { background: var(--accent-dk); }
+.btn.success { background: var(--ring-2); color: #000; }
+.btn.danger  { background: var(--red); color: #fff; }
+.btn.ghost   { background: transparent; border: 1px solid var(--line-2); color: var(--ink-dim); }
 
-  button {
-    font-family: inherit; font-size: 13px; font-weight: 600;
-    letter-spacing: .03em;
-    color: var(--ink); background: var(--panel-2);
-    border: 1px solid var(--line);
-    padding: 11px 10px; cursor: pointer;
-    transition: background .12s, border-color .12s, transform .04s;
-  }
-  button:active:not(:disabled) { transform: translateY(1px); }
-  button:hover:not(:disabled) { border-color: var(--amber-dk); }
-  button:disabled { opacity: .32; cursor: not-allowed; }
-  button.primary { background: var(--amber); color: #1a1500; border-color: var(--amber); }
-  button.primary:hover:not(:disabled) { background: #ffc24f; }
-  button.danger  { border-color: #5a2a24; color: var(--red); }
-  button.danger:hover:not(:disabled) { background: #2a1512; border-color: var(--red); }
-  button.warn-b { border-color: #5a4a20; color: var(--amber); }
-  button.warn-b:hover:not(:disabled) { background: #1c1708; border-color: var(--amber); }
-  button.go { border-color: #2f4d2c; color: var(--green); }
-  button.go:hover:not(:disabled) { background: #16240f; border-color: var(--green); }
+.btn-row {
+  display: flex; gap: 8px;
+}
+.btn-row .btn { flex: 1; }
 
-  .seg { display: flex; border: 1px solid var(--line); }
-  .seg button {
-    border: none; border-radius: 0; background: var(--panel);
-    flex: 1; font-size: 12px;
-  }
-  .seg button + button { border-left: 1px solid var(--line); }
-  .seg button.sel { background: var(--amber); color: #1a1500; }
+/* Status-Indikator (verbunden / getrennt) */
+.conn-status {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.conn-status .dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--ink-mute);
+}
+.conn-status.on .dot { background: var(--green); box-shadow: 0 0 10px var(--green); }
+.conn-status .label {
+  flex: 1;
+  font-size: 13px;
+}
+.conn-status .device-name {
+  color: var(--ink-dim); font-size: 11px; margin-top: 1px;
+}
 
-  /* stepper */
-  .stepper { display: flex; align-items: stretch; border: 1px solid var(--line); margin-top: 4px; }
-  .stepper button {
-    border: none; width: 54px; flex: none; font-size: 20px; font-weight: 700;
-    background: var(--panel-2); color: var(--amber);
-  }
-  .stepper .val {
-    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
-    padding: 6px 0; background: #0a0b07;
-  }
-  .stepper .val .big { font-size: 30px; font-weight: 700; color: var(--ink); line-height: 1; }
-  .stepper .val .unit { font-size: 10px; color: var(--ink-dim); margin-top: 3px; letter-spacing: .1em; }
+/* Pre-Workout-Sektion: Speed/Incline-Vorwahl */
+.preworkout-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.preworkout-card {
+  background: var(--bg-2);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+.preworkout-card .lbl {
+  font-size: 9px; color: var(--ink-dim);
+  letter-spacing: 0.2em; text-transform: uppercase;
+  margin-bottom: 4px; font-weight: 600;
+}
+.preworkout-card .vl {
+  font-size: 32px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.preworkout-card .vl .un {
+  font-size: 13px; color: var(--ink-dim);
+  margin-left: 3px; font-weight: 400;
+}
 
-  input[type=text], input[type=number], textarea {
-    font-family: inherit; font-size: 13px;
-    background: #0a0b07; color: var(--ink);
-    border: 1px solid var(--line); padding: 9px 10px; width: 100%;
-  }
-  textarea { resize: vertical; line-height: 1.5; }
-  input:focus, textarea:focus { outline: none; border-color: var(--amber-dk); }
+/* Footer-Aktionen */
+.setup-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setup-footer .btn-mini {
+  font-size: 11px; padding: 8px 12px;
+  color: var(--ink-mute); background: transparent;
+  text-align: center; cursor: pointer; border: none;
+}
+.setup-footer .btn-mini:hover { color: var(--ink-dim); }
 
-  .mini { font-size: 11px; color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
-  .mini b { color: var(--ink); font-weight: 600; }
-  .warn-box {
-    background: rgba(255, 180, 50, 0.10);
-    border: 1px solid rgba(255, 180, 50, 0.45);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--ink);
-    margin: 10px 0 16px;
-  }
-  .warn-box b { color: #f4a52a; }
-  .ist-line {
-    font-size: 12px;
-    color: var(--ink-dim);
-    margin-top: 6px;
-    text-align: center;
-    letter-spacing: .02em;
-  }
-  .ist-line b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Kompakter Status-Text */
+.mini {
+  font-size: 11px;
+  color: var(--ink-mute);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.mini b { color: var(--ink-dim); }
 
-  /* Prominente Live-Anzeige (IST-Werte vom Laufband) */
-  .live-box {
-    margin-top: 8px;
-    padding: 8px 12px;
-    background: rgba(116, 196, 107, 0.07);
-    border: 1px solid rgba(116, 196, 107, 0.35);
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  .live-box .live-label {
-    font-size: 10px;
-    color: rgba(116, 196, 107, 0.85);
-    letter-spacing: .15em;
-    font-weight: 600;
-    text-transform: uppercase;
-    flex: 1;
-  }
-  .live-box .live-val {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--green);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    transition: color 0.4s;
-  }
-  .live-box .live-unit {
-    font-size: 10px;
-    color: var(--ink-dim);
-    margin-left: 6px;
-    letter-spacing: .1em;
-  }
-  .live-box.flash .live-val { color: #fff; transition: color 0s; }
-  .live-box.stale .live-val { color: var(--ink-dim); }
+/* Web-Bluetooth-Warnung */
+.ctx-warn {
+  background: rgba(255, 69, 58, 0.1);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: 12px;
+  padding: 14px;
+  color: #ff9a93;
+  font-size: 12px;
+  line-height: 1.5;
+}
 
-  /* Schnelltasten unter den Steppern */
-  .quick-row {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
-  }
-  .quick-row button {
-    flex: 1;
-    background: transparent;
-    border: 1px solid var(--line);
-    color: var(--ink-dim);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 6px 0;
-    cursor: pointer;
-    font-family: inherit;
-    letter-spacing: .03em;
-    transition: all 0.15s;
-  }
-  .quick-row button:hover:not(:disabled) {
-    border-color: var(--amber-dk);
-    color: var(--amber);
-  }
-  .quick-row button:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
+/* =============================================================================
+   WORKOUT-VIEW (Querformat, beim Laufen)
+   ============================================================================= */
+.view-workout {
+  width: 100vw; height: 100vh;
+  flex-direction: column;
+  position: fixed; top: 0; left: 0;
+  background: var(--bg-0);
+  z-index: 10;
+}
 
-  /* Workout-Statistik (Zeit + Distanz, große grüne Anzeige) */
-  .workout-panel {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 14px;
-  }
-  .workout-panel .live-box {
-    margin-top: 0;
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 10px 12px;
-  }
-  .workout-panel .live-label {
-    margin-bottom: 4px;
-  }
-  .workout-panel .live-val {
-    font-size: 28px;
-  }
+/* Hinweis bei Hochformat */
+.orientation-prompt {
+  display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+  padding: 40px 30px;
+  text-align: center;
+  gap: 18px;
+}
+.orientation-prompt .icon {
+  font-size: 80px;
+  color: var(--accent);
+  animation: rotateHint 2s ease-in-out infinite;
+}
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-90deg); }
+}
+.orientation-prompt .text {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+}
+.orientation-prompt .sub {
+  font-size: 13px; color: var(--ink-dim); line-height: 1.5;
+}
+.orientation-prompt .btn-exit {
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
 
-  /* log */
-  #log {
-    background: #0a0b07; border: 1px solid var(--line);
-    height: 230px; overflow-y: auto;
-    font-size: 11px; line-height: 1.55;
-    padding: 8px 9px;
-    white-space: pre-wrap; word-break: break-all;
-  }
-  .l-tx  { color: var(--amber); }
-  .l-rx  { color: var(--blue); }
-  .l-ok  { color: var(--green); }
-  .l-err { color: var(--red); }
-  .l-sys { color: var(--ink-dim); }
-  .l-t   { color: #4a4c39; }
+/* Im Hochformat: Workout-Inhalt verbergen, Prompt zeigen */
+@media (orientation: portrait) {
+  .view-workout.active .workout-content { display: none; }
+  .view-workout.active .orientation-prompt { display: flex; }
+}
+@media (orientation: landscape) {
+  .view-workout.active .workout-content { display: grid; }
+  .view-workout.active .orientation-prompt { display: none; }
+}
 
-  .warn {
-    border: 1px solid #5a4520; background: #1c1708;
-    padding: 10px 12px; font-size: 11px; line-height: 1.55;
-    color: #d8c79a; margin-bottom: 12px;
-  }
-  .warn b { color: var(--amber); }
-  footer { font-size: 10px; color: #45473a; text-align: center; padding: 6px 0 2px; line-height: 1.5; }
-  .clearbtn { flex: none !important; width: auto; padding: 6px 12px; font-size: 11px; }
+/* Workout-Inhalt (Mockup C Querformat-Layout) */
+.workout-content {
+  display: none;
+  height: 100vh; width: 100vw;
+  grid-template-columns: 30% 1fr 28%;
+  gap: 12px;
+  padding: 14px 18px;
+  padding: max(14px, env(safe-area-inset-top))
+           max(18px, env(safe-area-inset-right))
+           max(14px, env(safe-area-inset-bottom))
+           max(18px, env(safe-area-inset-left));
+}
+
+/* LINKS-Spalte */
+.w-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0; min-height: 0;
+}
+.w-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.w-topbar .brand {
+  font-size: 11px; letter-spacing: 0.2em; color: var(--ink-dim);
+  text-transform: uppercase; font-weight: 600;
+}
+.w-topbar .status {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--ring-2);
+}
+.w-topbar .status .dot {
+  width: 6px; height: 6px; background: var(--ring-2);
+  border-radius: 50%; box-shadow: 0 0 6px var(--ring-2);
+}
+
+.rings-section {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  flex: 1; min-height: 0;
+}
+.rings-section svg {
+  width: min(48vh, 100%); height: min(48vh, 100%);
+  max-width: 240px; max-height: 240px;
+}
+.rings-legend {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px; width: 100%; margin-top: 8px;
+}
+.rings-legend .item { text-align: center; }
+.rings-legend .lbl {
+  font-size: 8px; color: var(--ink-dim);
+  letter-spacing: 0.15em; text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.rings-legend .vl {
+  font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rings-legend .item.zeit .vl    { color: var(--ring-1); }
+.rings-legend .item.speed .vl   { color: var(--ring-2); }
+.rings-legend .item.strecke .vl { color: var(--ring-3); }
+
+/* MITTE-Spalte (Hero) */
+.w-center {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-width: 0;
+}
+.hero-label {
+  font-size: 11px; color: var(--ink-dim);
+  letter-spacing: 0.3em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.hero-speed {
+  font-size: clamp(110px, 28vh, 220px);
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 0.85;
+  letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s;
+}
+.hero-speed.live { color: var(--ring-2); }
+.hero-unit {
+  font-size: 16px; color: var(--ink-dim);
+  letter-spacing: 0.2em; margin-top: 4px;
+  text-transform: uppercase;
+}
+.hero-time {
+  margin-top: 12px;
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.hero-time .sub {
+  font-size: 9px; color: var(--ink-dim);
+  letter-spacing: 0.25em; text-transform: uppercase;
+  display: block; margin-bottom: 2px; font-weight: 600;
+}
+.secondary-bar {
+  margin-top: 14px;
+  display: flex; gap: 24px;
+  align-items: baseline;
+}
+.secondary-bar .item { text-align: center; }
+.secondary-bar .item .v {
+  font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.secondary-bar .item .l {
+  font-size: 9px; color: var(--ink-dim);
+  letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px;
+}
+.secondary-bar .item.watts .v   { color: var(--accent); }
+.secondary-bar .item.incline .v { color: var(--ring-3); }
+
+/* RECHTS-Spalte (Stepper) */
+.w-right {
+  display: flex; flex-direction: column;
+  gap: 8px; min-width: 0;
+}
+.stepper-block {
+  background: var(--bg-1);
+  border-radius: 14px;
+  padding: 8px 10px 10px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  flex: 1;
+}
+.stepper-block .lbl {
+  font-size: 9px; color: var(--ink-dim);
+  letter-spacing: 0.2em; text-transform: uppercase;
+  font-weight: 600;
+}
+.stepper-block .v {
+  font-size: 24px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.stepper-block .v .un {
+  font-size: 11px; color: var(--ink-dim);
+  font-weight: 400; margin-left: 3px;
+}
+.stepper-block .row {
+  display: flex; gap: 6px;
+  width: 100%; margin-top: auto;
+}
+.stepper-block .row button {
+  flex: 1; height: 40px;
+  background: var(--bg-2); border: none;
+  border-radius: 10px; color: var(--ink);
+  font-size: 22px; font-weight: 300;
+  font-family: inherit; cursor: pointer;
+}
+.stepper-block .row button.minus { color: var(--ring-3); }
+.stepper-block .row button.plus  { color: var(--accent); }
+.stepper-block .row button:active:not(:disabled) { transform: scale(0.94); }
+.stepper-block .row button:disabled { opacity: 0.35; }
+
+.bottom-actions {
+  display: flex; gap: 6px;
+}
+.bottom-actions button {
+  flex: 1; padding: 12px 0;
+  border: none; border-radius: 12px;
+  font-size: 12px; font-weight: 700;
+  font-family: inherit;
+  cursor: pointer; letter-spacing: 0.05em;
+  color: var(--ink); background: var(--bg-2);
+}
+.bottom-actions button:disabled { opacity: 0.4; }
+.bottom-actions button.start  { background: var(--ring-2); color: #000; }
+.bottom-actions button.pause  { color: var(--accent); }
+.bottom-actions button.exit   { flex: 0 0 44px; color: var(--ink-dim); font-size: 16px; }
+
+/* =============================================================================
+   SETTINGS-VIEW (Hochformat, Diagnose + Optionen)
+   ============================================================================= */
+.view-settings {
+  flex-direction: column;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 14px 18px 24px;
+  gap: 16px;
+}
+.settings-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 0 8px;
+}
+.settings-header .back-btn {
+  background: var(--bg-2); border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  font-size: 18px; color: var(--ink);
+  cursor: pointer; font-family: inherit;
+}
+.settings-header .title { font-size: 22px; font-weight: 700; }
+
+/* Diagnose-Log */
+#log {
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  height: 320px;
+  overflow-y: auto;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.l-tx  { color: var(--amber); }
+.l-rx  { color: var(--ring-3); }
+.l-ok  { color: var(--green); }
+.l-err { color: var(--red); }
+.l-sys { color: var(--ink-dim); }
+
+.raw-row {
+  display: flex; gap: 6px; margin-top: 8px;
+}
+.raw-row input {
+  flex: 1; background: var(--bg-2); border: 1px solid var(--line-2);
+  color: var(--ink); padding: 10px 12px;
+  font-family: "SF Mono", Menlo, monospace; font-size: 12px;
+  border-radius: 10px;
+}
+
+/* =============================================================================
+   GROßMODUS (Fullscreen-Speed-Anzeige) — bleibt aus v1.11 erhalten
+   ============================================================================= */
+body.bigscreen { background: #000; overflow: hidden; }
+body.bigscreen .view { display: none !important; }
+body.bigscreen #bigPanel { display: flex !important; }
+
+#bigPanel {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  flex-direction: column;
+  padding: 4vh 5vw;
+  gap: 2vh;
+  background: #000;
+}
+#bigPanel .big-speed-display {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  flex: 1; text-align: center;
+}
+#bigPanel .label-tiny {
+  font-size: 13px; color: var(--ink-dim);
+  letter-spacing: 0.3em; margin-bottom: 14px;
+  text-transform: uppercase;
+}
+#bigPanel .number {
+  font-size: clamp(120px, 38vw, 320px);
+  font-weight: 800; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 0.85; letter-spacing: -0.04em;
+  transition: color 0.3s;
+}
+#bigPanel .number.live { color: var(--ring-2); }
+#bigPanel .unit {
+  font-size: 22px; color: var(--ink-dim);
+  letter-spacing: 0.2em; margin-top: 18px;
+  text-transform: uppercase;
+}
+#bigPanel .big-secondary {
+  display: flex; justify-content: space-around; gap: 8px;
+}
+#bigPanel .big-secondary .stat {
+  text-align: center; font-size: 11px;
+  color: var(--ink-dim); letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+#bigPanel .big-secondary .stat b {
+  display: block; color: var(--ring-2);
+  font-size: 30px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0; margin-bottom: 3px;
+}
+#bigPanel .big-controls { display: flex; gap: 10px; }
+#bigPanel .big-controls button {
+  flex: 1; padding: 22px 0; font-size: 18px;
+  background: transparent; color: var(--accent);
+  border: 1px solid var(--accent-dk);
+  font-family: inherit;
+  letter-spacing: 0.15em; font-weight: 600;
+  text-transform: uppercase; cursor: pointer;
+  border-radius: 12px;
+}
+#bigPanel .big-controls .spd-btn {
+  flex: 0 0 22%; font-size: 28px; padding: 22px 0;
+}
+#bigPanel .big-controls .exit-big {
+  color: var(--ink-dim); border-color: var(--line-2);
+  font-size: 14px; flex: 0 0 18%;
+}
+
+/* Version-Badge unten rechts */
+.ver-corner {
+  position: fixed; bottom: 4px; right: 8px;
+  font-size: 9px; color: var(--ink-mute);
+  letter-spacing: 0.1em; pointer-events: none;
+  z-index: 1;
+}
+body.bigscreen .ver-corner { display: none; }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="ver">v1.9</div>
-  <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
-  <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
-</header>
-
-<div class="warn" id="ctxWarn" style="display:none">
-  <b>⚠ Kein Web-Bluetooth verfügbar.</b> Diese Seite muss in <b>Chrome auf Android</b>
-  und über <b>HTTPS</b> (z.B. GitHub Pages) geöffnet werden. Per <code>file://</code>
-  funktioniert Bluetooth nicht.
-</div>
-
-<!-- VERBINDUNG -->
-<div class="panel">
-  <div class="panel-h">1 · Verbindung</div>
-  <div class="panel-b">
-    <div class="status" style="margin-bottom:12px">
-      <div class="led" id="led"></div>
-      <span id="statusTxt">Getrennt</span>
-    </div>
-
-    <div class="row" style="margin-bottom:8px">
-      <button class="primary" id="btnConnect">Verbinden</button>
-      <button id="btnDisconnect" disabled>Trennen</button>
-    </div>
-    <button id="btnInit" disabled style="width:100%">Init-Sequenz senden (v83)</button>
-    <div class="mini">
-      Scan-Filter: Gerätename <b>I_TL…</b> / <b>I_IT…</b>. Falls dein Laufband nicht
-      auftaucht, unten „Alle Geräte" aktivieren und manuell wählen.<br>
-      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
-        <input type="checkbox" id="chkAll" style="width:auto;flex:none"> Alle Geräte zeigen
-      </label>
-    </div>
+<!-- ===== GROßMODUS-PANEL (Overlay) ===== -->
+<div id="bigPanel">
+  <div class="big-speed-display">
+    <div class="label-tiny">Geschwindigkeit</div>
+    <div class="number" id="bigSpeed">0.0</div>
+    <div class="unit">km/h</div>
+  </div>
+  <div class="big-secondary">
+    <div class="stat"><b id="bigTime">—</b>Laufzeit</div>
+    <div class="stat"><b id="bigInc">—</b>Steigung %</div>
+    <div class="stat"><b id="bigWatts">—</b>Watt</div>
+  </div>
+  <div class="big-controls">
+    <button class="spd-btn" id="bigMinus">−</button>
+    <button id="bigStart">▶ Start</button>
+    <button class="spd-btn" id="bigPlus">+</button>
+    <button class="exit-big" id="bigExit">×</button>
   </div>
 </div>
 
-<!-- STEUERUNG -->
-<div class="panel">
-  <div class="panel-h">2 · Steuerung</div>
-  <div class="panel-b">
-    <div class="row" style="margin-bottom:14px">
-      <button class="go" id="btnStart" disabled>▶ Start</button>
-      <button class="warn-b" id="btnPause" disabled>❚❚ Pause&nbsp;(App)</button>
-      <button class="danger" id="btnStop" disabled>■ Workout-Ende&nbsp;(App)</button>
+<!-- ===== SETUP-VIEW (Hochformat) ===== -->
+<div class="view view-setup active" id="viewSetup">
+  <div class="setup-header">
+    <div>
+      <div class="title">T6.5S</div>
+      <div class="sub">Workout-Steuerung via Bluetooth</div>
     </div>
-    <button id="btnDisconnectActive" class="danger" disabled style="width:100%;margin-bottom:6px">
-      ⏏ Verbindung trennen (Workout abbrechen)
-    </button>
+    <div class="ver-badge">v2.0</div>
+  </div>
 
-    <div class="warn-box">
-      <b>⚠ Wichtig:</b> Pause und Workout-Ende signalisieren der Konsole nur den
-      Workout-Übergang — das Laufband <b>bremst dadurch nicht physisch ab</b>.
-      Zum Anhalten den <b>roten Stop-Knopf am Laufband</b> drücken. (Die iFIT-App
-      schafft das Anhalten vermutlich über einen zusätzlichen, nicht über BLE
-      sichtbaren Cloud-/Auth-Mechanismus, der mit reinem BLE-Reverse-Engineering
-      nicht reproduzierbar ist.)
-    </div>
+  <div class="ctx-warn" id="ctxWarn" style="display:none">
+    <b>Web Bluetooth nicht verfügbar.</b><br>
+    Diese Seite muss über HTTPS aufgerufen werden und in einem unterstützten
+    Browser (Chrome, Edge auf Android/Desktop).
+  </div>
 
-    <label class="fld">Geschwindigkeit</label>
-    <div class="stepper">
-      <button id="spdMinus" disabled>−</button>
-      <div class="val"><span class="big" id="spdVal">0.0</span><span class="unit">SOLL · KM/H</span></div>
-      <button id="spdPlus" disabled>+</button>
-    </div>
-    <div class="quick-row">
-      <button class="quick-spd" data-spd="3"  disabled>3</button>
-      <button class="quick-spd" data-spd="5"  disabled>5</button>
-      <button class="quick-spd" data-spd="8"  disabled>8</button>
-      <button class="quick-spd" data-spd="10" disabled>10</button>
-      <button class="quick-spd" data-spd="12" disabled>12</button>
-    </div>
-    <div class="live-box" id="istSpdBox">
-      <span class="live-label">▶ Live vom Laufband</span>
-      <span><span class="live-val" id="istSpd">—</span><span class="live-unit">km/h</span></span>
-    </div>
-
-    <label class="fld" style="margin-top:14px">Steigung</label>
-    <div class="stepper">
-      <button id="incMinus" disabled>−</button>
-      <div class="val"><span class="big" id="incVal">0.0</span><span class="unit">SOLL · PROZENT</span></div>
-      <button id="incPlus" disabled>+</button>
-    </div>
-    <div class="quick-row">
-      <button class="quick-inc" data-inc="0" disabled>0 %</button>
-      <button class="quick-inc" data-inc="2" disabled>2 %</button>
-      <button class="quick-inc" data-inc="4" disabled>4 %</button>
-      <button class="quick-inc" data-inc="6" disabled>6 %</button>
-      <button class="quick-inc" data-inc="8" disabled>8 %</button>
-    </div>
-    <div class="live-box" id="istIncBox">
-      <span class="live-label">▶ Live vom Laufband</span>
-      <span><span class="live-val" id="istInc">—</span><span class="live-unit">%</span></span>
-    </div>
-
-    <div class="live-box" id="istWattsBox" style="margin-top:8px">
-      <span class="live-label">▶ Leistung live</span>
-      <span><span class="live-val" id="istWatts">—</span><span class="live-unit">Watt</span></span>
-    </div>
-
-    <!-- Workout-Tracking: Werte direkt aus den Telemetrie-Paketen der Konsole -->
-    <div class="workout-panel">
-      <div class="live-box" id="workoutTimeBox">
-        <span class="live-label">⏱ Laufzeit (Konsole)</span>
-        <span class="live-val" id="workoutTime">—</span>
-      </div>
-      <div class="live-box" id="workoutDistBox">
-        <span class="live-label">📏 Counter (Roh)</span>
-        <span class="live-val" id="workoutDist">—</span>
+  <!-- Schritt 1: Verbinden -->
+  <div class="card">
+    <div class="card-h"><span class="step-num" id="stp1">1</span>VERBINDUNG</div>
+    <div class="conn-status" id="connStatus">
+      <span class="dot"></span>
+      <div class="label">
+        <div id="connLabel">Getrennt</div>
+        <div class="device-name" id="connDevice">Bluetooth-Suche tippen</div>
       </div>
     </div>
-
-    <div class="mini">
-      <b>Sollwerte</b> (grosse Bernsteinzahlen) sind das, was du anforderst —
-      laufen über die Poll-Schleife (wie in QZ). <b>Live-Werte</b> (grün)
-      kommen aus den Telemetrie-Notifications der Konsole und blitzen kurz auf,
-      wenn ein Update reinkommt.<br>
-      <b>Speed</b> 1–16 km/h — unter 1 km/h gibt es keine Laufgeschwindigkeit,
-      ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.<br>
-      <b>Laufzeit</b> liest die Konsole aus Byte 25 des Telemetrie-Pakets —
-      springt automatisch auf 0 zurück, sobald du am Laufband Stop drückst.<br>
-      <b>Counter</b> ist ein Roh-Zähler (Bytes 29–31, ~4782 pro Sekunde bei
-      niedriger Geschwindigkeit) — vermutlich Motor-Encoder-Pulse. Müsste durch
-      eine Kalibrier-Messung in Meter umgerechnet werden, kann ich später bauen.
+    <div class="btn-row">
+      <button class="btn primary" id="btnConnect">🔗 Verbinden</button>
+      <button class="btn ghost" id="btnDisconnect" disabled>Trennen</button>
     </div>
   </div>
-</div>
 
-<!-- PAUSE / STOP-SEQUENZEN -->
-<div class="panel">
-  <div class="panel-h">2b · Pause- &amp; Stop-Sequenzen</div>
-  <div class="panel-b">
-    <label class="fld">Pause — ein Hex-Frame pro Zeile</label>
-    <textarea id="stopSeq" rows="3">fe 02 0c 02
-ff 0c 02 04 02 08 04 08 02 00 02 00 02 12 00 00 00 00 00 00</textarea>
-
-    <label class="fld" style="margin-top:12px">Stop / Workout beenden — ein Hex-Frame pro Zeile</label>
-    <textarea id="endSeq" rows="6">fe 02 0f 02
-ff 0f 02 04 02 0b 04 0b 02 00 05 00 00 00 00 10 26 00 00 00
-fe 02 0d 02
-ff 0d 02 04 02 09 04 09 02 02 00 10 01 00 22 00 00 00 00 00</textarea>
-
+  <!-- Schritt 2: Init -->
+  <div class="card">
+    <div class="card-h"><span class="step-num" id="stp2">2</span>INITIALISIEREN</div>
+    <button class="btn" id="btnInit" disabled>⚙ Init-Sequenz senden</button>
     <div class="mini" style="margin-top:8px">
-      Aus BLE-Sniffing der echten iFIT-App verifiziert (T6.5S `-INT.1`, v83):<br>
-      <b>Pause</b> = das „Halt"-Vorbereitungs-Frame (spezielles 0c 02 mit Payload `02 12`).<br>
-      <b>Stop</b> = sendet erst die Pause-Sequenz, lässt dann <b>1 Sekunde lang die
-      Polls weiterlaufen</b> (wie iFIT!), und schickt danach das Stop-Frame
-      <b>plus den abschließenden „Incline-Reset"-Befehl</b> (Commit).
+      Sendet das v83-Profil (26 Frames) und die iFIT-Control-Mode-Aktivierung.
     </div>
   </div>
-</div>
+
+  <!-- Schritt 3: Workout starten -->
+  <div class="card">
+    <div class="card-h"><span class="step-num" id="stp3">3</span>WORKOUT STARTEN</div>
+    <button class="btn success" id="btnStartWorkout" disabled>▶ Start &amp; in Querformat wechseln</button>
+    <div class="mini" style="margin-top:10px">
+      Das Laufband läuft auf 2.0 km/h los. Direkt im Anschluss wechselt die App
+      automatisch in den Querformat-Workout-Bildschirm — bitte das Handy drehen.
+    </div>
+  </div>
+
+  <div class="setup-footer">
+    <button class="btn ghost" id="btnGoSettings">🔧 Diagnose / Einstellungen</button>
+    <button class="btn-mini" id="btnAbout">App-Info</button>
   </div>
 </div>
 
-<!-- ROHBEFEHL -->
-<div class="panel">
-  <div class="panel-h">3 · Rohbefehl (Debug)</div>
-  <div class="panel-b">
-    <label class="fld">Hex-Bytes — ein BLE-Write auf 0x1534</label>
-    <div class="row">
-      <input type="text" id="rawHex" placeholder="fe 02 0d 02" style="flex:3">
-      <button id="btnRaw" disabled style="flex:1">Senden</button>
+<!-- ===== WORKOUT-VIEW (Querformat) ===== -->
+<div class="view view-workout" id="viewWorkout">
+  <!-- Hinweis bei Hochformat -->
+  <div class="orientation-prompt">
+    <div class="icon">📱</div>
+    <div class="text">Bitte Handy drehen</div>
+    <div class="sub">Der Workout-Bildschirm funktioniert nur im Querformat.<br>
+      Drehe dein Handy oder beende das Workout.</div>
+    <button class="btn-exit" id="btnExitWorkoutPortrait">Workout beenden</button>
+  </div>
+
+  <!-- Querformat-Inhalt -->
+  <div class="workout-content">
+    <!-- LINKS: Ringe -->
+    <div class="w-left">
+      <div class="w-topbar">
+        <div class="brand">⚙ T6.5S</div>
+        <div class="status"><span class="dot"></span> Verbunden</div>
+      </div>
+      <div class="rings-section">
+        <svg viewBox="0 0 220 220">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fa3567"/><stop offset="100%" stop-color="#ff5577"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#84db00"/><stop offset="100%" stop-color="#a6ff33"/>
+            </linearGradient>
+            <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#00d6ff"/><stop offset="100%" stop-color="#38e6ff"/>
+            </linearGradient>
+          </defs>
+          <!-- Ring Backgrounds -->
+          <circle cx="110" cy="110" r="96" stroke="#2a0c14" stroke-width="14" fill="none"/>
+          <circle cx="110" cy="110" r="74" stroke="#1b2806" stroke-width="14" fill="none"/>
+          <circle cx="110" cy="110" r="52" stroke="#062231" stroke-width="14" fill="none"/>
+          <!-- Aktive Ringe (Dashoffset wird per JS gesetzt) -->
+          <circle id="ringTime" cx="110" cy="110" r="96" stroke="url(#g1)" stroke-width="14"
+                  fill="none" stroke-linecap="round"
+                  stroke-dasharray="603" stroke-dashoffset="603"
+                  transform="rotate(-90 110 110)"/>
+          <circle id="ringSpeed" cx="110" cy="110" r="74" stroke="url(#g2)" stroke-width="14"
+                  fill="none" stroke-linecap="round"
+                  stroke-dasharray="465" stroke-dashoffset="465"
+                  transform="rotate(-90 110 110)"/>
+          <circle id="ringDist" cx="110" cy="110" r="52" stroke="url(#g3)" stroke-width="14"
+                  fill="none" stroke-linecap="round"
+                  stroke-dasharray="327" stroke-dashoffset="327"
+                  transform="rotate(-90 110 110)"/>
+        </svg>
+      </div>
+      <div class="rings-legend">
+        <div class="item zeit">
+          <div class="lbl">Zeit</div>
+          <div class="vl" id="wTime">—</div>
+        </div>
+        <div class="item speed">
+          <div class="lbl">Speed</div>
+          <div class="vl" id="wSpeedRing">—</div>
+        </div>
+        <div class="item strecke">
+          <div class="lbl">Strecke</div>
+          <div class="vl" id="wDist">—</div>
+        </div>
+      </div>
     </div>
-    <div class="mini">Für eigene Frames / Sniffing-Abgleich. Leerzeichen egal.</div>
+
+    <!-- MITTE: Hero -->
+    <div class="w-center">
+      <div class="hero-label">Geschwindigkeit</div>
+      <div class="hero-speed" id="wHeroSpeed">0.0</div>
+      <div class="hero-unit">km/h</div>
+      <div class="hero-time">
+        <span class="sub">Laufzeit</span>
+        <span id="wHeroTime">—</span>
+      </div>
+      <div class="secondary-bar">
+        <div class="item watts">
+          <div class="v" id="wWatts">—</div>
+          <div class="l">Watt</div>
+        </div>
+        <div class="item incline">
+          <div class="v" id="wInclineDisp">— %</div>
+          <div class="l">Steigung</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECHTS: Stepper -->
+    <div class="w-right">
+      <div class="stepper-block">
+        <div class="lbl">Speed</div>
+        <div class="v" id="wSpdSet">0.0<span class="un">km/h</span></div>
+        <div class="row">
+          <button class="minus" id="wSpdMinus">−</button>
+          <button class="plus"  id="wSpdPlus">+</button>
+        </div>
+      </div>
+      <div class="stepper-block">
+        <div class="lbl">Steigung</div>
+        <div class="v" id="wIncSet">0.0<span class="un">%</span></div>
+        <div class="row">
+          <button class="minus" id="wIncMinus">−</button>
+          <button class="plus"  id="wIncPlus">+</button>
+        </div>
+      </div>
+      <div class="bottom-actions">
+        <button class="pause" id="wPause">⏸</button>
+        <button class="start" id="wStop">■</button>
+        <button class="exit"  id="wBig">⛶</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- LOG -->
-<div class="panel">
-  <div class="panel-h" style="display:flex;justify-content:space-between;align-items:center">
-    <span>4 · Protokoll</span>
-    <button class="clearbtn" id="btnClear">Leeren</button>
+<!-- ===== SETTINGS-VIEW (Hochformat) ===== -->
+<div class="view view-settings" id="viewSettings">
+  <div class="settings-header">
+    <button class="back-btn" id="btnBackFromSettings">←</button>
+    <div class="title">Diagnose</div>
   </div>
-  <div class="panel-b" style="padding:0">
+
+  <div class="card">
+    <div class="card-h">PROTOKOLL-LOG</div>
     <div id="log"></div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn ghost" id="btnClear">Log leeren</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">RAW-FRAME SENDEN</div>
+    <div class="raw-row">
+      <input id="rawHex" placeholder="z.B. fe 02 0c 02" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn" id="btnRaw" disabled style="flex:0 0 90px">Senden</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">PROTOKOLL-INFO</div>
+    <div class="mini">
+      Service: <b>00001533-1412-…-d123</b><br>
+      Write: <b>0x1534</b> · Notify: <b>0x1535</b><br>
+      Profil: <b>nordictrack_t65s_83_treadmill</b> (v83)<br>
+      Init: 26 Frames · Start: 13 Frames (iFIT)<br>
+      Telemetrie: 60 Bytes, Multi-Fragment-Reassembly
+    </div>
   </div>
 </div>
 
-<footer>
-  Prototyp zu Testzwecken · ohne Gewähr · Laufband nur mit Sicherheitsschlüssel<br>
-  und freier Fläche betreiben. Protokoll-Logik portierbar nach Kotlin / React Native.
-</footer>
+<div class="ver-corner">v2.0</div>
 
 <script>
 "use strict";
@@ -751,31 +1107,44 @@ function parseTelemetryPacket(p) {
   S.istWatts   = watt;
 
   // ---- Workout-Daten aus dem Paket (verifiziert an echtem Workout-Log) ----
-  //   p[22]    = State-Flag (0x01=init, 0x02=läuft, 0x03=gestoppt)
+  //   p[22]    = State-Flag (0x01=init, 0x02=läuft, 0x03=gestoppt/pausiert)
   //   p[25]    = Workout-Sekunden, LOW  byte (resettet bei Stop am Laufband)
   //   p[26]    = Workout-Sekunden, HIGH byte (für Workouts > 4 min)
   //   p[29..31]= 24-bit kumulativer Counter (resettet ebenfalls bei Stop)
-  //              Einheit unbekannt — wächst konstant ~4782/Sek bei ~1 km/h.
-  //              Wahrscheinlich Motor-Encoder-Pulse, müsste durch eine
-  //              Kalibrier-Messung in Meter umgerechnet werden.
+  //              Wächst konstant ~4782/Sek bei ~1 km/h.
+  //              Wahrscheinlich Motor-Encoder-Pulse.
+  //   p[37]    = Ist-Geschwindigkeit × 100 in km/h (NEU identifiziert!)
+  //              Folgt einer Anlaufkurve beim Workout-Start.
+  const state = p[22];
+  const running = (state === 0x02);
+
   let consoleSec = null;
   let consoleCum = null;
+  let actualSpd  = null;
   if (p.length >= 32) {
     consoleSec = p[25] | (p[26] << 8);
     consoleCum = p[29] | (p[30] << 8) | (p[31] << 16);
   }
-
-  // Plausibilität: nur übernehmen wenn < 8h (sonst ist's Müll-Bytes)
-  if (consoleSec !== null && consoleSec < 28800) {
-    S.workoutSeconds = consoleSec;
-  }
-  if (consoleCum !== null && consoleCum < 0xffffff) {
-    S.workoutMeters = consoleCum;   // immer noch Roh-Counter, kein Meter
+  if (p.length >= 38) {
+    actualSpd = p[37] / 100;   // Hypothese: Ist-Speed in km/h
   }
 
-  // Diagnose: kompakter Hex-Dump der Workout-relevanten Bytes
-  const diag = p.slice(20, 32).map(b => b.toString(16).padStart(2,"0")).join(" ");
-  log(`  ⚙ telem[20..31]=${diag} · state=${p[22]} sec=${consoleSec} cnt=${consoleCum}`, "l-sys");
+  // Nur in laufendem Workout (state=0x02) die Konsole-Werte übernehmen.
+  // Bei state=0x03 (Pause/Stop) frieren die Werte ein — wie auf dem
+  // Laufband-Display selbst.
+  if (running) {
+    if (consoleSec !== null && consoleSec < 28800) {
+      S.workoutSeconds = consoleSec;
+    }
+    if (consoleCum !== null && consoleCum < 0xffffff) {
+      S.workoutMeters = consoleCum;
+    }
+  }
+
+  // Diagnose: zeigt die wichtigsten Positionen und den neu identifizierten
+  // Ist-Speed-Kandidaten (Position 37).
+  const stateName = state === 0x02 ? "RUN" : state === 0x03 ? "STOP" : `0x${state.toString(16)}`;
+  log(`  ⚙ ${stateName} sec=${consoleSec} cnt=${consoleCum} p37=${actualSpd?.toFixed(2)}km/h`, "l-sys");
 
   renderIst();
   renderWorkout();
@@ -788,19 +1157,16 @@ function parseTelemetryPacket(p) {
 async function connect() {
   if (!navigator.bluetooth) { log("Web Bluetooth nicht verfügbar.", "l-err"); return; }
   try {
-    setStatus("wait", "Gerät wählen…");
     log("Scan gestartet…", "l-sys");
 
-    const opts = $("chkAll").checked
-      ? { acceptAllDevices: true, optionalServices: [SVC] }
-      : { filters: [{ namePrefix: "I_TL" }, { namePrefix: "I_IT" }],
-          optionalServices: [SVC] };
+    // Nur Geräte mit T6.5S-Namensschema anbieten
+    const opts = { filters: [{ namePrefix: "I_TL" }, { namePrefix: "I_IT" }],
+                   optionalServices: [SVC] };
 
     S.device = await navigator.bluetooth.requestDevice(opts);
     S.device.addEventListener("gattserverdisconnected", onDisconnect);
     log(`Gerät: ${S.device.name || "(ohne Name)"}`, "l-sys");
 
-    setStatus("wait", "Verbinde GATT…");
     S.server  = await S.device.gatt.connect();
     const svc = await S.server.getPrimaryService(SVC);
     S.wrChar  = await svc.getCharacteristic(CH_WR);
@@ -814,13 +1180,10 @@ async function connect() {
     log("Notifications aktiv (0x1535).", "l-ok");
 
     S.connected = true;
-    setStatus("on", S.device.name || "verbunden");
-    $("statusTxt").innerHTML = `Verbunden · <span class="dev-name">${S.device.name || "Gerät"}</span>`;
     refreshUI();
     log("Bereit. Jetzt Init-Sequenz senden.", "l-ok");
   } catch (e) {
     log("Verbindung fehlgeschlagen: " + e.message, "l-err");
-    setStatus("off", "Getrennt");
     cleanup();
     refreshUI();
   }
@@ -830,11 +1193,15 @@ function onDisconnect() {
   log("Verbindung verloren.", "l-err");
   stopPoll();
   cleanup();
-  setStatus("off", "Getrennt");
   refreshUI();
+  // Wenn wir gerade im Workout sind, zurück zum Setup
+  if (document.getElementById("viewWorkout").classList.contains("active")) {
+    showView("Setup");
+  }
 }
 
 function cleanup() {
+  releaseWakeLock();
   S.connected = S.inited = false;
   S.wrChar = S.ntChar = S.server = null;
   S.reqSpeed = S.reqIncline = null; S.reqStart = false;
@@ -862,7 +1229,6 @@ async function disconnect() {
   stopPoll();
   try { if (S.device && S.device.gatt.connected) S.device.gatt.disconnect(); } catch(e){}
   cleanup();
-  setStatus("off", "Getrennt");
   refreshUI();
   log("Getrennt.", "l-sys");
 }
@@ -881,11 +1247,52 @@ async function runInit() {
     S.inited = true;
     log("Init abgeschlossen. Poll-Schleife startet.", "l-ok");
     startPoll();
+    requestWakeLock();
   } catch (e) {
     log("Init-Fehler: " + e.message, "l-err");
   }
   S.busy = false; refreshUI();
 }
+
+// =============================================================
+//  Wake Lock — verhindert dass das Display während eines Workouts
+//  ausgeht. Wird aktiv beim Init, freigegeben beim Disconnect.
+//  Wenn der Browser uns durch Sichtbarkeitsänderung den Lock entzieht
+//  (z.B. App-Wechsel), fordern wir ihn beim Zurückkommen neu an.
+// =============================================================
+let wakeLockSentinel = null;
+
+async function requestWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request("screen");
+    wakeLockSentinel.addEventListener("release", () => {
+      // Browser hat den Lock freigegeben (z.B. Tab im Hintergrund).
+      // Wir setzen die Variable zurück, der visibility-Handler unten
+      // fordert ihn wieder an, sobald wir wieder sichtbar sind.
+      wakeLockSentinel = null;
+    });
+    log("🔒 Bildschirm bleibt an (Wake Lock aktiv).", "l-ok");
+  } catch (e) {
+    // Häufiger Grund: Tab ist nicht sichtbar oder API blockiert
+    log("Wake Lock nicht verfügbar: " + e.message, "l-sys");
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    wakeLockSentinel.release().catch(() => {});
+    wakeLockSentinel = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  // Wenn der Tab wieder sichtbar wird UND wir noch eine aktive
+  // Verbindung haben, Wake Lock neu anfordern.
+  if (document.visibilityState === "visible" && S.connected && wakeLockSentinel === null) {
+    requestWakeLock();
+  }
+});
 
 // =============================================================
 // 5) POLL-SCHLEIFE  (zyklisch Keep-alive + Soll-Werte anwenden)
@@ -1099,142 +1506,290 @@ async function sendRaw() {
 }
 
 // =============================================================
-// 7) UI  (Buttons, Stepper, Live-Boxen, Render-Funktionen)
+// 7) UI v2.0 — View-System, Renderer, Event-Handler
 // =============================================================
-function setStatus(state, txt) {
-  const led = $("led");
-  led.className = "led" + (state === "on" ? " on" : state === "wait" ? " wait" : "");
-  $("statusTxt").textContent = txt;
+
+// View-Steuerung: welcher Bildschirm ist aktiv?
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  const el = document.getElementById("view" + name);
+  if (el) el.classList.add("active");
+  // Workout-View aktiv → renderWorkoutView() initial
+  if (name === "Workout") renderWorkoutView();
 }
-// Liefert den aktuell "aktiven" User-Zielwert für ein Feld ('speed'|'incline'),
-// d.h. der zuletzt per App eingegebene Wert, sofern er noch innerhalb der
-// USER_INPUT_HOLD_MS-Frist liegt. Sonst null.
+
+// Hilfsfunktion: gibt aktuell anzuzeigenden Speed/Incline zurück
+// (gleiche Hold-Logik wie früher, plus Live-Fallback)
 function activeUserTarget(kind) {
-  const v = (kind === "speed") ? S.lastUserTargetSpeed       : S.lastUserTargetIncline;
-  const t = (kind === "speed") ? S.lastUserTargetSpeedTime   : S.lastUserTargetInclineTime;
+  const v = (kind === "speed") ? S.lastUserTargetSpeed     : S.lastUserTargetIncline;
+  const t = (kind === "speed") ? S.lastUserTargetSpeedTime : S.lastUserTargetInclineTime;
   if (v === null || t === null) return null;
   if (Date.now() - t > USER_INPUT_HOLD_MS) return null;
   return v;
 }
-
-function renderValues() {
-  // Speed-Anzeige: während der User aktiv eingibt → reqSpeed.
-  // Innerhalb der Hold-Frist nach App-Eingabe → User-Zielwert.
-  // Sonst → Live-Wert vom Laufband (damit Hardware-Änderungen synchron sind).
-  let sShown;
-  if (S.reqSpeed !== null) {
-    sShown = S.reqSpeed;
-  } else {
-    const u = activeUserTarget("speed");
-    if (u !== null)              sShown = u;
-    else if (S.istSpeed !== null) sShown = S.istSpeed;
-    else                          sShown = S.speed;
-  }
-
-  let iShown;
-  if (S.reqIncline !== null) {
-    iShown = S.reqIncline;
-  } else {
-    const u = activeUserTarget("incline");
-    if (u !== null)                 iShown = u;
-    else if (S.istIncline !== null) iShown = S.istIncline;
-    else                            iShown = S.incline;
-  }
-
-  $("spdVal").textContent = sShown.toFixed(1);
-  $("incVal").textContent = iShown.toFixed(1);
+function currentDisplaySpeed() {
+  if (S.reqSpeed !== null) return { v: S.reqSpeed, live: false };
+  const u = activeUserTarget("speed");
+  if (u !== null) return { v: u, live: false };
+  if (S.istSpeed !== null) return { v: S.istSpeed, live: true };
+  return { v: S.speed, live: true };
 }
-function renderIst() {
-  const newSpd = S.istSpeed   === null ? "—" : S.istSpeed.toFixed(2);
-  const newInc = S.istIncline === null ? "—" : S.istIncline.toFixed(1);
-  const newWat = S.istWatts   === null ? "—" : S.istWatts.toString();
-  flashIfChanged("istSpd",   "istSpdBox",   newSpd);
-  flashIfChanged("istInc",   "istIncBox",   newInc);
-  flashIfChanged("istWatts", "istWattsBox", newWat);
-}
-function flashIfChanged(valId, boxId, newTxt) {
-  const el  = $(valId);
-  const box = $(boxId);
-  if (el.textContent !== newTxt) {
-    el.textContent = newTxt;
-    if (box) {
-      box.classList.add("flash");
-      setTimeout(() => box.classList.remove("flash"), 80);
-    }
-  }
-}
-function renderWorkout() {
-  // Werte kommen direkt aus den Telemetrie-Paketen der Konsole.
-  // Solange noch kein Paket angekommen ist → "—" anzeigen.
-  let timeTxt, distTxt;
-  if (S.workoutSeconds === null) {
-    timeTxt = "—";
-  } else {
-    const s = S.workoutSeconds;
-    const hh = Math.floor(s / 3600);
-    const mm = Math.floor((s % 3600) / 60);
-    const ss = s % 60;
-    timeTxt = hh > 0
-      ? `${hh}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`
-      : `${mm}:${String(ss).padStart(2,"0")}`;
-  }
-  if (S.workoutMeters === null) {
-    distTxt = "—";
-  } else {
-    // S.workoutMeters ist aktuell ein ROH-COUNTER aus dem Paket — die echte
-    // Einheit ist noch nicht geklärt. Wir zeigen ihn als Zahl an, damit man
-    // beim Test sehen kann, wie er sich verhält.
-    distTxt = S.workoutMeters.toString();
-  }
-  flashIfChanged("workoutTime", "workoutTimeBox", timeTxt);
-  flashIfChanged("workoutDist", "workoutDistBox", distTxt);
-}
-function refreshUI() {
-  const c = S.connected, ready = c && S.inited && !S.busy;
-  $("btnConnect").disabled    = c || S.busy;
-  $("btnDisconnect").disabled = !c;
-  $("btnInit").disabled       = !c || S.inited || S.busy;
-  $("btnStart").disabled      = !ready;
-  $("btnPause").disabled      = !ready;
-  $("btnStop").disabled       = !ready;
-  $("btnDisconnectActive").disabled = !c;
-  $("spdMinus").disabled = $("spdPlus").disabled = !ready;
-  $("incMinus").disabled = $("incPlus").disabled = !ready;
-  document.querySelectorAll(".quick-spd, .quick-inc").forEach(b => b.disabled = !ready);
-  $("btnRaw").disabled        = !c;
+function currentDisplayIncline() {
+  if (S.reqIncline !== null) return { v: S.reqIncline, live: false };
+  const u = activeUserTarget("incline");
+  if (u !== null) return { v: u, live: false };
+  if (S.istIncline !== null) return { v: S.istIncline, live: true };
+  return { v: S.incline, live: true };
 }
 
 // =============================================================
-//  Events
+//  RENDERER für Setup-View
+// =============================================================
+function renderSetupView() {
+  const c = S.connected, i = S.inited;
+  // Conn-Status
+  const cs = $("connStatus");
+  if (c) {
+    cs.classList.add("on");
+    $("connLabel").textContent  = "Verbunden";
+    $("connDevice").textContent = (S.device && S.device.name) ? S.device.name : "Gerät bereit";
+  } else {
+    cs.classList.remove("on");
+    $("connLabel").textContent  = "Getrennt";
+    $("connDevice").textContent = "Bluetooth-Suche tippen";
+  }
+  // Buttons
+  $("btnConnect").disabled    = c || S.busy;
+  $("btnDisconnect").disabled = !c;
+  $("btnInit").disabled       = !c || i || S.busy;
+  $("btnStartWorkout").disabled = !c || !i || S.busy;
+  $("btnRaw").disabled        = !c;
+  // Step-Indikatoren
+  $("stp1").className = "step-num " + (c ? "done" : "now");
+  $("stp2").className = "step-num " + (i ? "done" : (c ? "now" : ""));
+  $("stp3").className = "step-num " + (i && c ? "now" : "");
+}
+
+// =============================================================
+//  RENDERER für Workout-View (Querformat)
+// =============================================================
+// Optional konfigurierbare Ziele für die Ringe.
+// Default: 30 Min Zeit, 5 km Strecke, 12 km/h max Speed.
+// (Werden später per Settings/Workout-Start-Dialog konfigurierbar gemacht.)
+const WORKOUT_GOAL_SEC = 30 * 60;
+const WORKOUT_GOAL_M   = 5000;
+const WORKOUT_MAX_SPD  = 12;
+
+const RING_CIRC = { time: 603, speed: 465, dist: 327 };
+
+function renderWorkoutView() {
+  // Hero: aktueller Speed (oder Soll mit Hold-Logik)
+  const sp = currentDisplaySpeed();
+  const inc = currentDisplayIncline();
+  $("wHeroSpeed").textContent = sp.v.toFixed(1);
+  $("wHeroSpeed").classList.toggle("live", sp.live);
+  // Stepper-Sollwerte
+  $("wSpdSet").innerHTML = sp.v.toFixed(1) + '<span class="un">km/h</span>';
+  $("wIncSet").innerHTML = inc.v.toFixed(1) + '<span class="un">%</span>';
+  // Sekundäre Werte
+  $("wWatts").textContent       = S.istWatts === null   ? "—" : S.istWatts.toString();
+  $("wInclineDisp").textContent = (S.istIncline === null ? "—" : S.istIncline.toFixed(1)) + " %";
+
+  // Zeit
+  let timeTxt = "—";
+  if (S.workoutSeconds !== null) {
+    const s = S.workoutSeconds;
+    const mm = Math.floor(s/60), ss = s%60;
+    timeTxt = `${mm}:${String(ss).padStart(2,"0")}`;
+  }
+  $("wTime").textContent     = timeTxt;
+  $("wHeroTime").textContent = timeTxt;
+
+  // Speed-Anzeige im Legende-Block
+  $("wSpeedRing").textContent = sp.v.toFixed(1);
+
+  // Strecken-Wert: aktuell Roh-Counter (Konversion in Meter steht noch aus)
+  if (S.workoutMeters === null) {
+    $("wDist").textContent = "—";
+  } else {
+    // Roh-Counter — zeigen wir aktuell als kompakte Zahl
+    $("wDist").textContent = S.workoutMeters.toString();
+  }
+
+  // Ringe
+  setRingProgress("ringTime",  RING_CIRC.time,  (S.workoutSeconds || 0) / WORKOUT_GOAL_SEC);
+  setRingProgress("ringSpeed", RING_CIRC.speed, sp.v / WORKOUT_MAX_SPD);
+  // Strecken-Ring: solange Roh-Counter, zeigen wir den Counter / 100k als Annäherung
+  setRingProgress("ringDist",  RING_CIRC.dist,  (S.workoutMeters || 0) / 100000);
+}
+function setRingProgress(elId, circ, frac) {
+  const el = $(elId);
+  if (!el) return;
+  const f = Math.max(0, Math.min(1, frac));
+  el.setAttribute("stroke-dashoffset", String(circ * (1 - f)));
+}
+
+// =============================================================
+//  Wrapper-Render-Funktionen (kompatibel mit Backend-Aufrufen)
+// =============================================================
+function renderValues() {
+  // Wird aus dem Backend bei jedem Soll-Wechsel aufgerufen
+  renderWorkoutView();
+  renderBig();
+}
+function renderIst() {
+  // Wird aus dem Backend bei jedem Telemetrie-Paket aufgerufen
+  renderWorkoutView();
+  renderBig();
+}
+function renderWorkout() {
+  // Wird aus dem Backend bei Workout-Sec-Update aufgerufen
+  renderWorkoutView();
+  renderBig();
+}
+function refreshUI() {
+  // Backend ruft das bei State-Änderungen auf
+  renderSetupView();
+}
+
+// Stepper-Logik (gleiche wie v1.11)
+function currentSpeedDisplay() {
+  const u = activeUserTarget("speed");
+  if (u !== null) return u;
+  if (S.istSpeed !== null) return S.istSpeed;
+  return S.speed;
+}
+function currentInclineDisplay() {
+  const u = activeUserTarget("incline");
+  if (u !== null) return u;
+  if (S.istIncline !== null) return S.istIncline;
+  return S.incline;
+}
+function stepSpeed(d) {
+  let base = currentSpeedDisplay();
+  let t = +(base + d).toFixed(1);
+  if (t < MIN_RUN) {
+    if (d < 0) { pauseBelt(); return; }
+    t = MIN_RUN;
+  }
+  queueSpeed(Math.min(SPEED_MAX, t));
+}
+function stepIncline(d) {
+  let base = currentInclineDisplay();
+  queueIncline(Math.max(0, Math.min(INC_MAX, +(base + d).toFixed(1))));
+}
+
+// Großmodus-Rendering (aus v1.11)
+function renderBig() {
+  const bigSpd = $("bigSpeed");
+  if (!bigSpd) return;
+  const sp = currentDisplaySpeed();
+  bigSpd.textContent = sp.v.toFixed(1);
+  bigSpd.classList.toggle("live", sp.live);
+  if ($("bigInc"))   $("bigInc").textContent   = S.istIncline === null ? "—" : S.istIncline.toFixed(1);
+  if ($("bigWatts")) $("bigWatts").textContent = S.istWatts   === null ? "—" : S.istWatts.toString();
+  if ($("bigTime")) {
+    if (S.workoutSeconds === null) {
+      $("bigTime").textContent = "—";
+    } else {
+      const s = S.workoutSeconds, mm = Math.floor(s/60), ss = s%60;
+      $("bigTime").textContent = `${mm}:${String(ss).padStart(2,"0")}`;
+    }
+  }
+}
+
+// Großmodus-Toggle
+async function enterBigMode() {
+  document.body.classList.add("bigscreen");
+  try {
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch (e) { /* ok */ }
+  renderBig();
+}
+function exitBigMode() {
+  document.body.classList.remove("bigscreen");
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && document.body.classList.contains("bigscreen")) {
+    document.body.classList.remove("bigscreen");
+  }
+});
+
+// =============================================================
+//  Workout-Starter: Start drücken → Belt starten → in Querformat wechseln
+// =============================================================
+async function startWorkoutAndSwitch() {
+  startBelt();
+  // Kurz warten, damit die Start-Sequenz rausgegangen ist
+  await sleep(200);
+  showView("Workout");
+  // Orientation Lock versuchen, wenn im Fullscreen
+  try {
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape");
+    }
+  } catch (e) { /* Hinweis-Prompt fängt es ab */ }
+}
+
+function exitWorkoutView() {
+  // Aus Fullscreen + Orientation Lock raus
+  if (screen.orientation && screen.orientation.unlock) {
+    try { screen.orientation.unlock(); } catch (e) {}
+  }
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+  showView("Setup");
+}
+
+// =============================================================
+//  Event-Bindings
 // =============================================================
 $("btnConnect").onclick    = connect;
 $("btnDisconnect").onclick = disconnect;
 $("btnInit").onclick       = runInit;
-$("btnStart").onclick      = startBelt;
-$("btnPause").onclick      = pauseBelt;
-$("btnStop").onclick       = stopBelt;
-$("btnDisconnectActive").onclick = disconnect;
-$("spdPlus").onclick   = () => stepSpeed(+SPEED_STEP);
-$("spdMinus").onclick  = () => stepSpeed(-SPEED_STEP);
-$("incPlus").onclick   = () => stepIncline(+INC_STEP);
-$("incMinus").onclick  = () => stepIncline(-INC_STEP);
-// Schnelltasten: Speed/Incline direkt auf Zielwert setzen
-document.querySelectorAll(".quick-spd").forEach(btn => {
-  btn.onclick = () => queueSpeed(parseFloat(btn.dataset.spd));
-});
-document.querySelectorAll(".quick-inc").forEach(btn => {
-  btn.onclick = () => queueIncline(parseFloat(btn.dataset.inc));
-});
-$("btnRaw").onclick    = sendRaw;
-$("btnClear").onclick  = () => logEl.innerHTML = "";
+$("btnStartWorkout").onclick = startWorkoutAndSwitch;
 
-// init
+$("btnGoSettings").onclick = () => showView("Settings");
+$("btnBackFromSettings").onclick = () => showView("Setup");
+$("btnAbout").onclick = () => alert("T6.5S Workout v2.0\nBluetooth-Steuerung für NordicTrack T6.5S");
+
+$("btnRaw").onclick    = sendRaw;
+$("btnClear").onclick  = () => $("log").innerHTML = "";
+
+// Workout-View-Buttons
+$("wSpdMinus").onclick = () => stepSpeed(-SPEED_STEP);
+$("wSpdPlus").onclick  = () => stepSpeed(+SPEED_STEP);
+$("wIncMinus").onclick = () => stepIncline(-INC_STEP);
+$("wIncPlus").onclick  = () => stepIncline(+INC_STEP);
+$("wPause").onclick    = pauseBelt;
+$("wStop").onclick     = stopBelt;
+$("wBig").onclick      = enterBigMode;
+$("btnExitWorkoutPortrait").onclick = exitWorkoutView;
+
+// Großmodus-Buttons
+$("bigMinus").onclick   = () => stepSpeed(-SPEED_STEP);
+$("bigPlus").onclick    = () => stepSpeed(+SPEED_STEP);
+$("bigStart").onclick   = startBelt;
+$("bigExit").onclick    = exitBigMode;
+
+// Init bei Seitenladung
 if (!navigator.bluetooth) {
   $("ctxWarn").style.display = "block";
 }
-log("Prototyp geladen. 'Verbinden' antippen.", "l-sys");
-log("Reihenfolge: Verbinden → Init senden → Start → Speed/Incline.", "l-sys");
-refreshUI(); renderValues(); renderIst(); renderWorkout();
+log("App geladen. Verbinde mit dem Laufband, um zu starten.", "l-sys");
+refreshUI();
+renderWorkoutView();
+renderBig();
+
 </script>
 </body>
 </html>
