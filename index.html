@@ -273,7 +273,7 @@
 <body>
 
 <header>
-  <div class="ver">v1.6</div>
+  <div class="ver">v1.7</div>
   <h1>NORDICTRACK T6.5S · BLE PROTOTYP</h1>
   <div class="sub">Web-Bluetooth Steuer-Test · proformtreadmill-Protokoll</div>
 </header>
@@ -389,7 +389,11 @@
       kommen aus den Telemetrie-Notifications der Konsole und blitzen kurz auf,
       wenn ein Update reinkommt.<br>
       <b>Speed</b> 1–16 km/h — unter 1 km/h gibt es keine Laufgeschwindigkeit,
-      ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.
+      ein Schritt nach unten löst darum <b>Pause (App)</b> aus · <b>Incline</b> 0–10 %.<br>
+      <b>Strecke und Zeit</b> werden lokal aus der Live-Geschwindigkeit
+      berechnet — wenn das Band länger als 3 Sekunden steht und dann wieder
+      anläuft (z.B. nach physischem Stop+Start am Laufband), wird der Zähler
+      automatisch zurückgesetzt, damit's mit der Konsole synchron bleibt.
     </div>
   </div>
 </div>
@@ -616,9 +620,18 @@ const S = {
   // IST-Werte (aus Telemetrie-Notifications)
   istSpeed: null, istIncline: null, istWatts: null,
 
+  // SOLL-Anzeige-Tracking: nach User-Eingabe (App-Stepper/Schnelltaste) halten
+  // wir den Zielwert für eine kurze Zeit in der Anzeige fest, danach übernehmen
+  // wir den Live-Wert vom Laufband (damit Hardware-Änderungen sichtbar werden).
+  lastUserTargetSpeed: null,
+  lastUserTargetSpeedTime: null,
+  lastUserTargetIncline: null,
+  lastUserTargetInclineTime: null,
+
   // Workout-Tracking (lokal berechnet, wie in QZ)
   workoutStart: null,        // ms-Timestamp ab dem ersten echten Speed > 0
   workoutLastTick: null,     // ms-Timestamp des letzten Distanz-Updates
+  workoutLastActive: null,   // ms-Timestamp des letzten Speed>0 (für Pause-Detection)
   workoutSeconds: 0,         // gesamte Laufzeit in s (ohne Stillstand)
   workoutMeters: 0,          // zurückgelegte Strecke in m
   workoutTimer: null,        // setInterval-Handle für die Uhr
@@ -627,6 +640,18 @@ const S = {
 };
 const SPEED_MAX = 16, SPEED_STEP = 0.5, MIN_RUN = 1.0;
 const INC_MAX   = 10, INC_STEP   = 0.5;
+
+// Auto-Reset: wenn das Band länger als diese Schwelle still steht und dann
+// wieder anläuft (typisch: physischer Stop+Start am Laufband), wird die
+// lokale Workout-Anzeige (Zeit + Strecke) auf 0 zurückgesetzt, damit sie
+// synchron mit der Laufband-Konsole bleibt.
+const PAUSE_RESET_MS = 3000;   // 3 Sekunden Stillstand = Pause-Erkennung
+
+// Nach einer App-Eingabe (Stepper +/- oder Schnelltaste) halten wir den
+// User-Zielwert in der grossen SOLL-Anzeige für diese Dauer fest. Danach
+// übernimmt die Anzeige den Live-Wert vom Laufband (damit Hardware-Änderungen
+// am Laufband sichtbar werden, ohne dass man manuell synchronisieren muss).
+const USER_INPUT_HOLD_MS = 15000;  // 15 Sekunden
 
 // =============================================================
 //  UI-Referenzen + Logging
@@ -701,18 +726,32 @@ function onNotify(ev) {
     //   Distance += (Speed/3600000) * msecsSinceLastUpdate )
     const now = Date.now();
     if (spd > 0) {
+      // Auto-Reset: war das Band länger als PAUSE_RESET_MS still und läuft
+      // jetzt wieder? → vermutlich physischer Stop+Start am Laufband →
+      // Workout-Zähler zurücksetzen, damit's mit der Konsole synchron bleibt.
+      if (S.workoutLastActive !== null &&
+          (now - S.workoutLastActive) > PAUSE_RESET_MS) {
+        const pauseDur = Math.round((now - S.workoutLastActive) / 1000);
+        S.workoutSeconds = 0;
+        S.workoutMeters  = 0;
+        S.workoutStart   = now;
+        log(`↻ ${pauseDur}s Stillstand erkannt — Strecke/Zeit zurückgesetzt`, "l-ok");
+      }
       if (S.workoutStart === null) S.workoutStart = now;
       if (S.workoutLastTick !== null) {
         const dtMs = now - S.workoutLastTick;
         S.workoutMeters += (spd / 3.6) * (dtMs / 1000);
       }
-      S.workoutLastTick = now;
+      S.workoutLastTick   = now;
+      S.workoutLastActive = now;
     } else {
-      // Stillstand: Uhr pausiert, Distanz wächst nicht
+      // Stillstand: Distanz-Integration pausiert
       S.workoutLastTick = null;
+      // workoutLastActive bleibt erhalten — für Pause-Erkennung beim Wiederanlauf
     }
     renderIst();
     renderWorkout();
+    renderValues();   // SOLL-Anzeige ggf. auf Live-Wert nachziehen (Hold-Frist abgelaufen oder noch nie eingestellt)
   }
 }
 
@@ -774,6 +813,8 @@ function cleanup() {
   S.reqSpeed = S.reqIncline = null; S.reqStart = false;
   S.speed = S.incline = 0; S.counter = 0;
   S.istSpeed = S.istIncline = S.istWatts = null;
+  S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
+  S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
   resetWorkout();
   renderValues(); renderIst(); renderWorkout();
 }
@@ -783,10 +824,11 @@ function cleanup() {
 // =============================================================
 function resetWorkout() {
   if (S.workoutTimer) { clearInterval(S.workoutTimer); S.workoutTimer = null; }
-  S.workoutStart    = null;
-  S.workoutLastTick = null;
-  S.workoutSeconds  = 0;
-  S.workoutMeters   = 0;
+  S.workoutStart      = null;
+  S.workoutLastTick   = null;
+  S.workoutLastActive = null;
+  S.workoutSeconds    = 0;
+  S.workoutMeters     = 0;
 }
 function tickWorkoutClock() {
   // Sekunden-Uhr, läuft solange Band > 0 km/h
@@ -881,11 +923,39 @@ async function pollTick() {
 // =============================================================
 // 6) STEUER-AKTIONEN  (Start / Pause / Stop / Speed-Setzen)
 // =============================================================
-function queueSpeed(v)   { S.reqSpeed = v;   renderValues(); log(`Speed angefordert: ${v.toFixed(1)}`, "l-sys"); }
-function queueIncline(v) { S.reqIncline = v; renderValues(); log(`Incline angefordert: ${v.toFixed(1)}`, "l-sys"); }
+function queueSpeed(v) {
+  S.reqSpeed = v;
+  S.lastUserTargetSpeed     = v;
+  S.lastUserTargetSpeedTime = Date.now();
+  renderValues();
+  log(`Speed angefordert: ${v.toFixed(1)}`, "l-sys");
+}
+function queueIncline(v) {
+  S.reqIncline = v;
+  S.lastUserTargetIncline     = v;
+  S.lastUserTargetInclineTime = Date.now();
+  renderValues();
+  log(`Incline angefordert: ${v.toFixed(1)}`, "l-sys");
+}
+
+// Hilfsfunktion: aktuell in der grossen SOLL-Anzeige gezeigter Wert.
+// Wird als Basis für +/- Schritte verwendet, damit der Stepper bei einem
+// schon laufenden Workout nicht plötzlich auf 0 zurückspringt.
+function currentSpeedDisplay() {
+  const u = activeUserTarget("speed");
+  if (u !== null) return u;
+  if (S.istSpeed !== null) return S.istSpeed;
+  return S.speed;
+}
+function currentInclineDisplay() {
+  const u = activeUserTarget("incline");
+  if (u !== null) return u;
+  if (S.istIncline !== null) return S.istIncline;
+  return S.incline;
+}
 
 function stepSpeed(d) {
-  let base = S.reqSpeed !== null ? S.reqSpeed : S.speed;
+  let base = currentSpeedDisplay();
   let t = +(base + d).toFixed(1);
   if (t < MIN_RUN) {
     if (d < 0) { pauseBelt(); return; }   // unter Minimum runter -> Pause
@@ -895,7 +965,7 @@ function stepSpeed(d) {
   renderValues();
 }
 function stepIncline(d) {
-  let base = S.reqIncline !== null ? S.reqIncline : S.incline;
+  let base = currentInclineDisplay();
   queueIncline(Math.max(0, Math.min(INC_MAX, +(base + d).toFixed(1))));
   renderValues();
 }
@@ -904,11 +974,16 @@ function startBelt() {
   if (!S.inited) { log("Erst Init senden.", "l-err"); return; }
   S.reqStart = true;
   // Neues Workout: Distanz + Zeit zurücksetzen (Uhr läuft schon)
-  S.workoutSeconds = 0;
-  S.workoutMeters  = 0;
-  S.workoutStart   = null;
-  S.workoutLastTick = null;
+  S.workoutSeconds    = 0;
+  S.workoutMeters     = 0;
+  S.workoutStart      = null;
+  S.workoutLastTick   = null;
+  S.workoutLastActive = null;
+  // Alte User-Zielwerte löschen — die Anzeige soll dem Band folgen (das startet auf 2.0).
+  S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
+  S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
   renderWorkout();
+  renderValues();
   log("Start angefordert — Workout-Tracking zurückgesetzt.", "l-sys");
 }
 function parseSeq(elId, label) {
@@ -1018,9 +1093,41 @@ function setStatus(state, txt) {
   led.className = "led" + (state === "on" ? " on" : state === "wait" ? " wait" : "");
   $("statusTxt").textContent = txt;
 }
+// Liefert den aktuell "aktiven" User-Zielwert für ein Feld ('speed'|'incline'),
+// d.h. der zuletzt per App eingegebene Wert, sofern er noch innerhalb der
+// USER_INPUT_HOLD_MS-Frist liegt. Sonst null.
+function activeUserTarget(kind) {
+  const v = (kind === "speed") ? S.lastUserTargetSpeed       : S.lastUserTargetIncline;
+  const t = (kind === "speed") ? S.lastUserTargetSpeedTime   : S.lastUserTargetInclineTime;
+  if (v === null || t === null) return null;
+  if (Date.now() - t > USER_INPUT_HOLD_MS) return null;
+  return v;
+}
+
 function renderValues() {
-  const sShown = S.reqSpeed   !== null ? S.reqSpeed   : S.speed;
-  const iShown = S.reqIncline !== null ? S.reqIncline : S.incline;
+  // Speed-Anzeige: während der User aktiv eingibt → reqSpeed.
+  // Innerhalb der Hold-Frist nach App-Eingabe → User-Zielwert.
+  // Sonst → Live-Wert vom Laufband (damit Hardware-Änderungen synchron sind).
+  let sShown;
+  if (S.reqSpeed !== null) {
+    sShown = S.reqSpeed;
+  } else {
+    const u = activeUserTarget("speed");
+    if (u !== null)              sShown = u;
+    else if (S.istSpeed !== null) sShown = S.istSpeed;
+    else                          sShown = S.speed;
+  }
+
+  let iShown;
+  if (S.reqIncline !== null) {
+    iShown = S.reqIncline;
+  } else {
+    const u = activeUserTarget("incline");
+    if (u !== null)                 iShown = u;
+    else if (S.istIncline !== null) iShown = S.istIncline;
+    else                            iShown = S.incline;
+  }
+
   $("spdVal").textContent = sShown.toFixed(1);
   $("incVal").textContent = iShown.toFixed(1);
 }
