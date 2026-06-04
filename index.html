@@ -4,22 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-
-<!-- PWA-Manifest -->
 <link rel="manifest" href="manifest.json">
-
-<!-- iOS-PWA-Tags -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="T6.5S">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
-
-<!-- Mobile-Browser-Tags -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="application-name" content="T6.5S">
-
 <title>T6.5S Workout</title>
 <style>
 /* =============================================================================
@@ -886,7 +879,7 @@ body.bigscreen .ver-corner { display: none; }
   <div class="side-divider"></div>
 
   <!-- Navigations-Einträge: öffnen jeweils einen Modal-Dialog -->
-  <button class="side-btn" data-modal="modalProfile">👤 Profil &amp; Gewicht</button>
+  <button class="side-btn" data-modal="modalProfile">👤 Profil</button>
   <button class="side-btn" data-modal="modalCalib">📏 Strecken-Kalibrierung</button>
   <button class="side-btn" data-modal="modalDiag">🔧 Diagnose &amp; Raw-Frame</button>
   <button class="side-btn" data-modal="modalAbout">ℹ App-Info</button>
@@ -915,33 +908,50 @@ body.bigscreen .ver-corner { display: none; }
       <div class="rings-section">
         <svg viewBox="0 0 220 220">
           <defs>
-            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#fa3567"/><stop offset="100%" stop-color="#ff5577"/>
-            </linearGradient>
-            <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+            <!-- Speed (grün, außen) -->
+            <linearGradient id="g_speed" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stop-color="#84db00"/><stop offset="100%" stop-color="#a6ff33"/>
             </linearGradient>
-            <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+            <!-- Kalorien hell (für 0-100, 200-300, …) -->
+            <linearGradient id="g_kcal_l" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fa3567"/><stop offset="100%" stop-color="#ff5577"/>
+            </linearGradient>
+            <!-- Kalorien dunkel (für 100-200, 300-400, …) -->
+            <linearGradient id="g_kcal_d" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#7a1330"/><stop offset="100%" stop-color="#a31e3f"/>
+            </linearGradient>
+            <!-- Distance/Runde (blau, innen) -->
+            <linearGradient id="g_dist" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stop-color="#00d6ff"/><stop offset="100%" stop-color="#38e6ff"/>
             </linearGradient>
           </defs>
-          <!-- Ring Backgrounds -->
-          <circle cx="110" cy="110" r="96" stroke="#2a0c14" stroke-width="14" fill="none"/>
-          <circle cx="110" cy="110" r="74" stroke="#1b2806" stroke-width="14" fill="none"/>
+          <!-- Ring-Hintergründe (von außen nach innen) -->
+          <circle cx="110" cy="110" r="96" stroke="#1b2806" stroke-width="14" fill="none"/>
+          <circle cx="110" cy="110" r="74" stroke="#2a0c14" stroke-width="14" fill="none"/>
           <circle cx="110" cy="110" r="52" stroke="#062231" stroke-width="14" fill="none"/>
           <!-- Aktive Ringe -->
-          <circle id="ringTime" cx="110" cy="110" r="96" stroke="url(#g1)" stroke-width="14"
+          <!-- Speed außen (r=96, Umfang ≈ 603) -->
+          <circle id="ringSpeed" cx="110" cy="110" r="96" stroke="url(#g_speed)" stroke-width="14"
                   fill="none" stroke-linecap="round"
                   stroke-dasharray="603" stroke-dashoffset="603"
                   transform="rotate(-90 110 110)"/>
-          <circle id="ringSpeed" cx="110" cy="110" r="74" stroke="url(#g2)" stroke-width="14"
+          <!-- Kalorien mitte (r=74, Umfang ≈ 465) -->
+          <circle id="ringKcal" cx="110" cy="110" r="74" stroke="url(#g_kcal_l)" stroke-width="14"
                   fill="none" stroke-linecap="round"
                   stroke-dasharray="465" stroke-dashoffset="465"
                   transform="rotate(-90 110 110)"/>
-          <circle id="ringDist" cx="110" cy="110" r="52" stroke="url(#g3)" stroke-width="14"
+          <!-- Distance/Runde innen (r=52, Umfang ≈ 327) -->
+          <circle id="ringDist" cx="110" cy="110" r="52" stroke="url(#g_dist)" stroke-width="14"
                   fill="none" stroke-linecap="round"
                   stroke-dasharray="327" stroke-dashoffset="327"
                   transform="rotate(-90 110 110)"/>
+          <!-- Runden-Zähler in der Mitte -->
+          <text id="lapCount" x="110" y="117" text-anchor="middle"
+                fill="#fff" font-size="40" font-weight="700"
+                font-family="inherit" letter-spacing="-0.02em">0</text>
+          <text x="110" y="140" text-anchor="middle"
+                fill="#666" font-size="10" letter-spacing="2"
+                font-family="inherit">RUNDEN</text>
         </svg>
       </div>
     </div>
@@ -1024,13 +1034,13 @@ body.bigscreen .ver-corner { display: none; }
 <div class="modal" id="modalProfile">
   <div class="modal-card">
     <div class="modal-head">
-      <div class="modal-title">👤 Profil &amp; Gewicht</div>
+      <div class="modal-title">👤 Profil</div>
       <button class="modal-close" data-close="modalProfile">×</button>
     </div>
     <div class="modal-body">
-      <div class="mini" style="margin-bottom: 12px">
-        Dein Gewicht wird für die ACSM-Kalorienberechnung benötigt.
-        Wird lokal im Browser gespeichert.
+      <div class="modal-section-h">GEWICHT</div>
+      <div class="mini" style="margin-bottom: 10px">
+        Wird für die ACSM-Kalorienberechnung verwendet.
       </div>
       <div class="weight-row">
         <button class="wbtn" id="wgtMinus">−</button>
@@ -1039,6 +1049,20 @@ body.bigscreen .ver-corner { display: none; }
           <span class="wgt-unit">kg</span>
         </div>
         <button class="wbtn" id="wgtPlus">+</button>
+      </div>
+
+      <div class="modal-section-h" style="margin-top: 18px">RUNDENLÄNGE</div>
+      <div class="mini" style="margin-bottom: 10px">
+        Eine Runde entspricht der Länge einer typischen Sportbahn (Standard: 400&nbsp;m).
+        Der innere Distanz-Ring füllt sich pro Runde, in der Mitte wird die Rundenzahl angezeigt.
+      </div>
+      <div class="weight-row">
+        <button class="wbtn" id="lapMinus">−</button>
+        <div class="wgt-display">
+          <input type="number" id="lapInput" min="50" max="2000" step="50">
+          <span class="wgt-unit">m</span>
+        </div>
+        <button class="wbtn" id="lapPlus">+</button>
       </div>
     </div>
   </div>
@@ -1308,6 +1332,11 @@ const S = {
 
   // Nutzergewicht (kg) für Kalorien-Berechnung — wird aus localStorage geladen.
   userWeight: 75,
+
+  // Rundenlänge (Meter) — wird aus localStorage geladen.
+  // Pro Runde füllt sich der innere Distance-Ring komplett, dann beginnt
+  // er neu. In der Mitte wird die Anzahl der absolvierten Runden gezeigt.
+  lapLength: 400,
 
   // Workout-Status: wurde der Start-Befehl bereits gesendet?
   // Wird beim Drücken von Start gesetzt, beim Disconnect/Stop wieder false.
@@ -1928,12 +1957,13 @@ function renderSideMenu() {
 // =============================================================
 //  RENDERER für Workout-View (Querformat)
 // =============================================================
-// Optional konfigurierbare Ziele für die Ringe.
-// Default: 30 Min Zeit, 5 km Strecke, 12 km/h max Speed.
-// (Werden später per Settings/Workout-Start-Dialog konfigurierbar gemacht.)
-const WORKOUT_GOAL_SEC = 30 * 60;
-const WORKOUT_GOAL_M   = 5000;
-const WORKOUT_MAX_SPD  = 12;
+// Maximalgeschwindigkeit des T6.5S → 16 km/h.
+// Der Speed-Ring außen ist bei 16 km/h voll.
+const WORKOUT_MAX_SPD  = 16;
+
+// Kalorien-Ring-Skala: alle 100 kcal wechselt der Ring die Farbe
+// (hell / dunkel / hell / dunkel …). 100 ist also der "Maßstab" pro Zyklus.
+const KCAL_RING_STEP   = 100;
 
 // Konversionsfaktor: Roh-Counter → Meter.
 // Kalibriert anhand eines Workouts mit 10 Datenpunkten bei konstanter
@@ -1942,7 +1972,8 @@ const WORKOUT_MAX_SPD  = 12;
 //   - Vorhersage-Genauigkeit: < 1.5 m Fehler über 1000 m
 const COUNTER_TO_METERS = 1 / 5667;
 
-const RING_CIRC = { time: 603, speed: 465, dist: 327 };
+// Ring-Umfänge (2π × r): Speed r=96, Kcal r=74, Dist r=52
+const RING_CIRC = { speed: 603, kcal: 465, dist: 327 };
 
 function renderWorkoutView() {
   // Quick-Buttons + Stepper aktivieren/deaktivieren je nach Verbindungsstatus.
@@ -2018,10 +2049,24 @@ function renderWorkoutView() {
   }
   $("wHeroDist").textContent = distTxt;
 
-  // Ringe
-  setRingProgress("ringTime",  RING_CIRC.time,  (S.workoutSeconds || 0) / WORKOUT_GOAL_SEC);
+  // Ringe (neue Konfiguration):
+  //   - Außen:  Speed → progress = sp.v / 16
+  //   - Mitte:  Kalorien → 100er-Zyklus mit alternierender Farbe (hell/dunkel)
+  //   - Innen:  Distance pro Runde → progress = (meter % lapLength) / lapLength
+  //             In der Mitte wird die absolvierte Rundenzahl angezeigt.
   setRingProgress("ringSpeed", RING_CIRC.speed, sp.v / WORKOUT_MAX_SPD);
-  setRingProgress("ringDist",  RING_CIRC.dist,  distMeters / WORKOUT_GOAL_M);
+
+  const kcalTotal = S.workoutKcal || 0;
+  const kcalCycle = Math.floor(kcalTotal / KCAL_RING_STEP);   // 0, 1, 2, …
+  const kcalInCyc = kcalTotal - kcalCycle * KCAL_RING_STEP;   // 0…100
+  setRingProgress("ringKcal", RING_CIRC.kcal, kcalInCyc / KCAL_RING_STEP);
+  // Farbe wechselt: gerade Zyklen hell, ungerade Zyklen dunkel
+  $("ringKcal").setAttribute("stroke", kcalCycle % 2 === 0 ? "url(#g_kcal_l)" : "url(#g_kcal_d)");
+
+  const laps = S.lapLength > 0 ? Math.floor(distMeters / S.lapLength) : 0;
+  const inLap = S.lapLength > 0 ? (distMeters % S.lapLength) : 0;
+  setRingProgress("ringDist", RING_CIRC.dist, inLap / S.lapLength);
+  $("lapCount").textContent = laps.toString();
 }
 function setRingProgress(elId, circ, frac) {
   const el = $(elId);
@@ -2362,7 +2407,7 @@ $("btnCalibClear").onclick = clearCalibList;
 renderCalibList();   // initial leeren-Hinweis anzeigen
 
 // =============================================================
-//  Gewichts-Eingabe (für Kalorien-Berechnung)
+//  Profil: Gewicht + Rundenlänge
 // =============================================================
 function setWeight(kg) {
   const w = Math.max(20, Math.min(250, +kg));
@@ -2370,29 +2415,44 @@ function setWeight(kg) {
   $("wgtInput").value = w;
   try { localStorage.setItem("t65s.userWeight", String(w)); } catch (e) {}
 }
+function setLapLength(m) {
+  const v = Math.max(50, Math.min(2000, Math.round(+m / 50) * 50));
+  S.lapLength = v;
+  $("lapInput").value = v;
+  try { localStorage.setItem("t65s.lapLength", String(v)); } catch (e) {}
+  renderWorkoutView();   // Ringe sofort neu berechnen
+}
+
+// Erst aus localStorage laden (falls vorhanden) …
+try {
+  const sW = localStorage.getItem("t65s.userWeight");
+  if (sW !== null) {
+    const w = parseFloat(sW);
+    if (w > 20 && w < 250) S.userWeight = w;
+  }
+  const sL = localStorage.getItem("t65s.lapLength");
+  if (sL !== null) {
+    const l = parseInt(sL, 10);
+    if (l >= 50 && l <= 2000) S.lapLength = l;
+  }
+} catch (e) { /* localStorage evtl. blockiert */ }
+
+// … dann Inputs initialisieren
 $("wgtInput").value = S.userWeight;
 $("wgtInput").onchange = (e) => setWeight(parseFloat(e.target.value) || 75);
 $("wgtMinus").onclick  = () => setWeight(S.userWeight - 0.5);
 $("wgtPlus").onclick   = () => setWeight(S.userWeight + 0.5);
 
+$("lapInput").value = S.lapLength;
+$("lapInput").onchange = (e) => setLapLength(parseInt(e.target.value, 10) || 400);
+$("lapMinus").onclick  = () => setLapLength(S.lapLength - 50);
+$("lapPlus").onclick   = () => setLapLength(S.lapLength + 50);
+
 // Web-Bluetooth-Verfügbarkeit prüfen
 if (!navigator.bluetooth) {
   $("ctxWarn").style.display = "block";
 }
-
-// Nutzer-Gewicht aus localStorage laden (für Kalorien-Berechnung)
-try {
-  const saved = localStorage.getItem("t65s.userWeight");
-  if (saved !== null) {
-    const w = parseFloat(saved);
-    if (w > 20 && w < 250) S.userWeight = w;
-  }
-} catch (e) { /* localStorage evtl. blockiert */ }
 log("App geladen. Verbinde mit dem Laufband, um zu starten.", "l-sys");
-
-// =============================================================
-//  PWA Service-Worker-Registration
-// =============================================================
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js")
