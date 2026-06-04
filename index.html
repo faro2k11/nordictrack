@@ -234,56 +234,11 @@ html, body {
   z-index: 10;
 }
 
-/* Hinweis bei Hochformat */
-.orientation-prompt {
-  display: none;
-  flex-direction: column;
-  align-items: center; justify-content: center;
-  width: 100%; height: 100%;
-  padding: 40px 30px;
-  text-align: center;
-  gap: 18px;
-}
-.orientation-prompt .icon {
-  font-size: 80px;
-  color: var(--accent);
-  animation: rotateHint 2s ease-in-out infinite;
-}
-@keyframes rotateHint {
-  0%, 100% { transform: rotate(0deg); }
-  50%      { transform: rotate(-90deg); }
-}
-.orientation-prompt .text {
-  font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
-}
-.orientation-prompt .sub {
-  font-size: 13px; color: var(--ink-dim); line-height: 1.5;
-}
-.orientation-prompt .btn-exit {
-  margin-top: 16px;
-  padding: 10px 20px;
-  background: transparent;
-  color: var(--ink-dim);
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* Im Hochformat: Workout-Inhalt verbergen, Prompt zeigen */
-@media (orientation: portrait) {
-  .view-workout.active .workout-content { display: none; }
-  .view-workout.active .orientation-prompt { display: flex; }
-}
-@media (orientation: landscape) {
-  .view-workout.active .workout-content { display: grid; }
-  .view-workout.active .orientation-prompt { display: none; }
-}
+/* Workout-Inhalt: immer als Grid (Querformat-Layout, unabhängig von Geräte-Orientierung) */
+.view-workout.active .workout-content { display: grid; }
 
 /* Workout-Inhalt (Mockup C Querformat-Layout) */
 .workout-content {
-  display: none;
   height: 100vh; width: 100vw;
   grid-template-columns: 30% 1fr 28%;
   gap: 12px;
@@ -302,20 +257,50 @@ html, body {
   min-width: 0; min-height: 0;
 }
 .w-topbar {
-  display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 4px;
 }
-.w-topbar .brand {
-  font-size: 11px; letter-spacing: 0.2em; color: var(--ink-dim);
-  text-transform: uppercase; font-weight: 600;
+.w-topbar .device-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.w-topbar .status {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 10px; color: var(--ring-2);
+.w-topbar .device-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.05em;
+  font-family: "SF Mono", Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.w-topbar .status .dot {
-  width: 6px; height: 6px; background: var(--ring-2);
-  border-radius: 50%; box-shadow: 0 0 6px var(--ring-2);
+.w-topbar .device-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  color: var(--ink-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.w-topbar .device-status .dot {
+  width: 6px; height: 6px;
+  background: var(--ink-mute);
+  border-radius: 50%;
+}
+.w-topbar .device-status.on {
+  color: var(--ring-2);
+}
+.w-topbar .device-status.on .dot {
+  background: var(--ring-2);
+  box-shadow: 0 0 6px var(--ring-2);
+}
+.w-topbar .device-status.preview {
+  color: var(--accent);
+}
+.w-topbar .device-status.preview .dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
 }
 
 .rings-section {
@@ -486,11 +471,22 @@ html, body {
   color: var(--ink); background: var(--bg-2);
 }
 .bottom-actions button:disabled { opacity: 0.4; }
-.bottom-actions button.disconnect {
-  background: rgba(255, 69, 58, 0.15);
+.bottom-actions button.startstop {
+  background: var(--ring-2);
+  color: #000;
+  flex: 2;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+}
+.bottom-actions button.startstop.running {
+  background: rgba(255, 69, 58, 0.18);
   color: var(--red);
-  flex: 1;
-  font-size: 18px;
+}
+.bottom-actions button.disconnect {
+  background: var(--bg-2);
+  color: var(--ink-dim);
+  flex: 0 0 44px;
+  font-size: 16px;
 }
 .bottom-actions button.exit   { flex: 0 0 44px; color: var(--ink-dim); font-size: 16px; }
 
@@ -741,7 +737,7 @@ body.bigscreen .ver-corner { display: none; }
       <div class="title">T6.5S</div>
       <div class="sub">Workout-Steuerung via Bluetooth</div>
     </div>
-    <div class="ver-badge">v2.5</div>
+    <div class="ver-badge">v2.6</div>
   </div>
 
   <div class="ctx-warn" id="ctxWarn" style="display:none">
@@ -750,9 +746,9 @@ body.bigscreen .ver-corner { display: none; }
     Browser (Chrome, Edge auf Android/Desktop).
   </div>
 
-  <!-- Schritt 1: Verbinden -->
+  <!-- Schritt 1: Verbinden + automatisch Init + Workout-Wechsel -->
   <div class="card">
-    <div class="card-h"><span class="step-num" id="stp1">1</span>VERBINDUNG</div>
+    <div class="card-h"><span class="step-num" id="stp1">1</span>VERBINDEN</div>
     <div class="conn-status" id="connStatus">
       <span class="dot"></span>
       <div class="label">
@@ -760,28 +756,10 @@ body.bigscreen .ver-corner { display: none; }
         <div class="device-name" id="connDevice">Bluetooth-Suche tippen</div>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="btn primary" id="btnConnect">🔗 Verbinden</button>
-      <button class="btn ghost" id="btnDisconnect" disabled>Trennen</button>
-    </div>
-  </div>
-
-  <!-- Schritt 2: Init -->
-  <div class="card">
-    <div class="card-h"><span class="step-num" id="stp2">2</span>INITIALISIEREN</div>
-    <button class="btn" id="btnInit" disabled>⚙ Init-Sequenz senden</button>
+    <button class="btn primary" id="btnConnect">🔗 Verbinden &amp; Workout vorbereiten</button>
     <div class="mini" style="margin-top:8px">
-      Sendet das v83-Profil (26 Frames) und die iFIT-Control-Mode-Aktivierung.
-    </div>
-  </div>
-
-  <!-- Schritt 3: Workout starten -->
-  <div class="card">
-    <div class="card-h"><span class="step-num" id="stp3">3</span>WORKOUT STARTEN</div>
-    <button class="btn success" id="btnStartWorkout" disabled>▶ Start &amp; in Querformat wechseln</button>
-    <div class="mini" style="margin-top:10px">
-      Das Laufband läuft auf 2.0 km/h los. Direkt im Anschluss wechselt die App
-      automatisch in den Querformat-Workout-Bildschirm — bitte das Handy drehen.
+      Verbindet mit dem Laufband, sendet die Init-Sequenz und wechselt automatisch
+      zum Workout-Bildschirm. Das Laufband wird dabei <b>nicht</b> gestartet.
     </div>
   </div>
 
@@ -794,22 +772,18 @@ body.bigscreen .ver-corner { display: none; }
 
 <!-- ===== WORKOUT-VIEW (Querformat) ===== -->
 <div class="view view-workout" id="viewWorkout">
-  <!-- Hinweis bei Hochformat -->
-  <div class="orientation-prompt">
-    <div class="icon">📱</div>
-    <div class="text">Bitte Handy drehen</div>
-    <div class="sub">Der Workout-Bildschirm funktioniert nur im Querformat.<br>
-      Drehe dein Handy oder beende das Workout.</div>
-    <button class="btn-exit" id="btnExitWorkoutPortrait">Workout beenden</button>
-  </div>
-
   <!-- Querformat-Inhalt -->
   <div class="workout-content">
     <!-- LINKS: Ringe -->
     <div class="w-left">
       <div class="w-topbar">
-        <div class="brand">⚙ T6.5S</div>
-        <div class="status"><span class="dot"></span> Verbunden</div>
+        <div class="device-block">
+          <div class="device-name" id="wDeviceName">—</div>
+          <div class="device-status" id="wStatus">
+            <span class="dot"></span>
+            <span id="wStatusText">Getrennt</span>
+          </div>
+        </div>
       </div>
       <div class="rings-section">
         <svg viewBox="0 0 220 220">
@@ -909,8 +883,9 @@ body.bigscreen .ver-corner { display: none; }
         </div>
       </div>
       <div class="bottom-actions">
-        <button class="disconnect" id="wDisconnect" title="Workout verlassen / trennen">⏻</button>
+        <button class="startstop" id="wStartStop">▶ Start</button>
         <button class="exit" id="wBig" title="Vollbild-Modus">⛶</button>
+        <button class="disconnect" id="wDisconnect" title="Workout verlassen / trennen">⏻</button>
       </div>
     </div>
   </div>
@@ -986,7 +961,7 @@ body.bigscreen .ver-corner { display: none; }
   </div>
 </div>
 
-<div class="ver-corner">v2.5</div>
+<div class="ver-corner">v2.6</div>
 
 <script>
 "use strict";
@@ -1182,6 +1157,10 @@ const S = {
 
   // Nutzergewicht (kg) für Kalorien-Berechnung — wird aus localStorage geladen.
   userWeight: 75,
+
+  // Workout-Status: wurde der Start-Befehl bereits gesendet?
+  // Wird beim Drücken von Start gesetzt, beim Disconnect/Stop wieder false.
+  workoutStarted: false,
 
   // Workout-Kalorien (kumulativ über das aktuelle Workout).
   // Werden bei jedem Telemetrie-Update sekündlich akkumuliert; resetten
@@ -1447,6 +1426,7 @@ function cleanup() {
   S.istSpeed = S.istIncline = S.istWatts = null;
   S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
   S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
+  S.workoutStarted = false;
   resetWorkout();
   renderValues(); renderIst(); renderWorkout();
 }
@@ -1799,14 +1779,9 @@ function renderSetupView() {
   }
   // Buttons
   $("btnConnect").disabled    = c || S.busy;
-  $("btnDisconnect").disabled = !c;
-  $("btnInit").disabled       = !c || i || S.busy;
-  $("btnStartWorkout").disabled = !c || !i || S.busy;
   $("btnRaw").disabled        = !c;
-  // Step-Indikatoren
+  // Step-Indikator
   $("stp1").className = "step-num " + (c ? "done" : "now");
-  $("stp2").className = "step-num " + (i ? "done" : (c ? "now" : ""));
-  $("stp3").className = "step-num " + (i && c ? "now" : "");
 }
 
 // =============================================================
@@ -1835,10 +1810,43 @@ function renderWorkoutView() {
   document.querySelectorAll("#wSpdQuick button, #wIncQuick button").forEach(b => b.disabled = !ready);
   $("wSpdMinus").disabled = $("wSpdPlus").disabled = !ready;
   $("wIncMinus").disabled = $("wIncPlus").disabled = !ready;
+  $("wStartStop").disabled = !ready;
 
   // Snapshot-Knopf: aktivieren sobald Workout-Daten verfügbar sind
   const snapBtn = $("btnCalibSnap");
   if (snapBtn) snapBtn.disabled = (S.workoutMeters === null || S.workoutSeconds === null);
+
+  // Geräte-Name + Status anzeigen
+  if ($("wDeviceName")) {
+    let name, statusText, statusClass;
+    if (S.previewMode) {
+      name = "Vorschau-Modus";
+      statusText = "Demo-Daten";
+      statusClass = "preview";
+    } else if (S.connected) {
+      name = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
+      statusText = "Verbunden";
+      statusClass = "on";
+    } else {
+      name = "—";
+      statusText = "Getrennt";
+      statusClass = "";
+    }
+    $("wDeviceName").textContent = name;
+    $("wStatusText").textContent = statusText;
+    $("wStatus").className = "device-status " + statusClass;
+  }
+
+  // Start/Stop-Knopf-Beschriftung
+  if ($("wStartStop")) {
+    if (S.workoutStarted) {
+      $("wStartStop").innerHTML = "■ Stop";
+      $("wStartStop").classList.add("running");
+    } else {
+      $("wStartStop").innerHTML = "▶ Start";
+      $("wStartStop").classList.remove("running");
+    }
+  }
 
   // Hero: aktueller Speed (oder Soll mit Hold-Logik)
   const sp = currentDisplaySpeed();
@@ -1975,12 +1983,18 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 // =============================================================
-//  Workout-Starter: Start drücken → Belt starten → in Querformat wechseln
+//  Connect + Init + automatischer Wechsel zur Workout-View
 // =============================================================
-async function startWorkoutAndSwitch() {
-  startBelt();
-  // Kurz warten, damit die Start-Sequenz rausgegangen ist
-  await sleep(200);
+async function connectAndPrepare() {
+  await connect();
+  if (!S.connected) return;     // Connect ist fehlgeschlagen
+  await runInit();
+  if (!S.inited) return;        // Init ist fehlgeschlagen
+  // Erfolgreich verbunden + initialisiert → direkt zur Workout-View
+  await goToWorkoutView();
+}
+
+async function goToWorkoutView() {
   showView("Workout");
   // Orientation Lock versuchen, wenn im Fullscreen
   try {
@@ -1990,7 +2004,38 @@ async function startWorkoutAndSwitch() {
     if (screen.orientation && screen.orientation.lock) {
       await screen.orientation.lock("landscape");
     }
-  } catch (e) { /* Hinweis-Prompt fängt es ab */ }
+  } catch (e) { /* PWA kann das, Browser oft nicht — sonst egal */ }
+}
+
+// Startet das Workout, falls noch nicht gestartet.
+// Wird sowohl vom Start-Knopf als auch von den Speed-Buttons aufgerufen.
+function ensureWorkoutStarted() {
+  if (S.workoutStarted) return false;
+  if (!S.connected || !S.inited) {
+    // Im Vorschau-Modus: einfach Flag setzen
+    if (S.previewMode) { S.workoutStarted = true; return true; }
+    return false;
+  }
+  startBelt();
+  S.workoutStarted = true;
+  return true;
+}
+
+// Wird vom Stop-Knopf aufgerufen.
+// Reduziert die Geschwindigkeit auf 1 km/h und weist den User an, am
+// Laufband zu stoppen (echter Stop via BLE funktioniert nicht).
+function stopWorkout() {
+  if (!confirm("Workout wirklich stoppen?\n\nDie Geschwindigkeit wird auf 1.0 km/h reduziert. Drücke danach am Laufband den roten Stop-Knopf.")) {
+    return;
+  }
+  if (S.connected && S.inited) {
+    queueSpeed(MIN_RUN);
+  }
+  S.workoutStarted = false;
+  setTimeout(() => {
+    alert("Die App hat die Geschwindigkeit auf 1.0 km/h reduziert.\n\nBitte am Laufband den roten Stop-Knopf drücken, um das Workout vollständig zu beenden.");
+  }, 300);
+  renderWorkoutView();
 }
 
 function exitWorkoutView() {
@@ -2007,45 +2052,51 @@ function exitWorkoutView() {
 // =============================================================
 //  Event-Bindings
 // =============================================================
-$("btnConnect").onclick    = connect;
-$("btnDisconnect").onclick = disconnect;
-$("btnInit").onclick       = runInit;
-$("btnStartWorkout").onclick = startWorkoutAndSwitch;
+$("btnConnect").onclick = connectAndPrepare;
 
 $("btnGoSettings").onclick = () => showView("Settings");
 $("btnBackFromSettings").onclick = () => showView("Setup");
-$("btnAbout").onclick = () => alert("T6.5S Workout v2.0\nBluetooth-Steuerung für NordicTrack T6.5S");
+$("btnAbout").onclick = () => alert("T6.5S Workout v2.6\nBluetooth-Steuerung für NordicTrack T6.5S");
 
 $("btnRaw").onclick    = sendRaw;
 $("btnClear").onclick  = () => $("log").innerHTML = "";
 
 // Workout-View-Buttons
-$("wSpdMinus").onclick = () => stepSpeed(-SPEED_STEP);
-$("wSpdPlus").onclick  = () => stepSpeed(+SPEED_STEP);
+$("wSpdMinus").onclick = () => { ensureWorkoutStarted(); stepSpeed(-SPEED_STEP); };
+$("wSpdPlus").onclick  = () => { ensureWorkoutStarted(); stepSpeed(+SPEED_STEP); };
 $("wIncMinus").onclick = () => stepIncline(-INC_STEP);
 $("wIncPlus").onclick  = () => stepIncline(+INC_STEP);
+
+// Start/Stop-Knopf — toggelt je nach Workout-Status
+$("wStartStop").onclick = () => {
+  if (S.workoutStarted) {
+    stopWorkout();
+  } else {
+    ensureWorkoutStarted();
+    renderWorkoutView();
+  }
+};
+
 $("wDisconnect").onclick = () => {
   if (S.previewMode) {
     stopPreviewMode();
     exitWorkoutView();
     return;
   }
-  // Aus Workout zurück + Verbindung trennen
   if (S.connected) {
     if (!confirm("Workout beenden und Verbindung trennen?\n\nDas Laufband läuft weiter — zum Anhalten den roten Stop-Knopf am Laufband drücken.")) return;
     disconnect();
   }
   exitWorkoutView();
 };
-$("wBig").onclick      = enterBigMode;
-$("btnExitWorkoutPortrait").onclick = () => {
-  if (S.previewMode) stopPreviewMode();
-  exitWorkoutView();
-};
+$("wBig").onclick = enterBigMode;
 
-// Schnelltasten im Workout-Bildschirm
+// Schnelltasten im Workout-Bildschirm — starten Workout falls noch nicht gestartet
 document.querySelectorAll("#wSpdQuick button").forEach(btn => {
-  btn.onclick = () => queueSpeed(parseFloat(btn.dataset.spd));
+  btn.onclick = () => {
+    ensureWorkoutStarted();
+    queueSpeed(parseFloat(btn.dataset.spd));
+  };
 });
 document.querySelectorAll("#wIncQuick button").forEach(btn => {
   btn.onclick = () => queueIncline(parseFloat(btn.dataset.inc));
@@ -2064,21 +2115,35 @@ let previewTimer = null;
 
 function startPreviewMode() {
   S.previewMode = true;
-  // Demo-Werte setzen — Counter so dass die Strecke bei ca. 1500 m losgeht
-  S.istSpeed   = 7.5;
-  S.istIncline = 2.0;
-  S.istWatts   = 87;
-  S.workoutSeconds = 754;             // 12:34
-  S.workoutMeters  = 1500 * 5667;     // ≈ 1500 m über kalibrierten Faktor
-  S.workoutKcal    = 105;             // Demo-Kalorien
-  S.lastKcalSec    = 754;
+  S.workoutStarted = false;     // Vorschau startet ohne aktives Workout
+  // Initial-Werte: Bereit, aber noch nicht aktiv
+  S.istSpeed   = 0;
+  S.istIncline = 0;
+  S.istWatts   = 0;
+  S.workoutSeconds = 0;
+  S.workoutMeters  = 0;
+  S.workoutKcal    = 0;
+  S.lastKcalSec    = 0;
   S.speed = S.incline = 0;
   // Telemetrie simulieren — sekündlich
   if (previewTimer) clearInterval(previewTimer);
   previewTimer = setInterval(() => {
     if (!S.previewMode) return;
+    // Vorschau-Live-Werte folgen den User-Eingaben (mit kleinem Wackeln)
+    const targetSpd = S.lastUserTargetSpeed !== null ? S.lastUserTargetSpeed
+                     : (S.workoutStarted ? 7.5 : 0);
+    const targetInc = S.lastUserTargetIncline !== null ? S.lastUserTargetIncline : 0;
+    S.istSpeed   = targetSpd > 0 ? targetSpd + (Math.random() - 0.5) * 0.06 : 0;
+    S.istIncline = targetInc;
+    S.istWatts   = Math.round(targetSpd * 12);   // grobe Demo-Schätzung
+
+    // Nur zählen wenn Workout aktiv ist (entspricht echtem Verhalten)
+    if (!S.workoutStarted || targetSpd < 0.5) {
+      renderWorkoutView();
+      renderBig();
+      return;
+    }
     S.workoutSeconds++;
-    S.istSpeed = 7.5 + (Math.random() - 0.5) * 0.06;
     // Counter wächst mit Speed: 5667 Ticks pro Meter
     const metersPerSec = S.istSpeed / 3.6;
     S.workoutMeters += Math.round(metersPerSec * 5667);
@@ -2095,6 +2160,7 @@ function startPreviewMode() {
 }
 function stopPreviewMode() {
   S.previewMode = false;
+  S.workoutStarted = false;
   if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
   // State zurücksetzen
   S.istSpeed = S.istIncline = S.istWatts = null;
@@ -2213,7 +2279,6 @@ log("App geladen. Verbinde mit dem Laufband, um zu starten.", "l-sys");
 
 // =============================================================
 //  PWA Service-Worker-Registration
-//  (Cacht die App für Offline-Start; nur über HTTPS aktiv)
 // =============================================================
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
