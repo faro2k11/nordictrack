@@ -8,7 +8,7 @@
 <!-- PWA-Manifest -->
 <link rel="manifest" href="manifest.json">
 
-<!-- iOS-PWA-Tags (Safari ignoriert Manifest, deshalb separat) -->
+<!-- iOS-PWA-Tags -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="T6.5S">
@@ -60,55 +60,8 @@ html, body {
 .view.active { display: flex; }
 
 /* =============================================================================
-   SETUP-VIEW (Hochformat, beim Verbinden/Init)
+   GEMEINSAME UI-ELEMENTE
    ============================================================================= */
-.view-setup {
-  flex-direction: column;
-  max-width: 440px;
-  margin: 0 auto;
-  min-height: 100vh;
-  padding: 14px 18px 24px;
-  gap: 16px;
-}
-.setup-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 8px 2px 6px;
-}
-.setup-header .title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
-.setup-header .sub   { font-size: 11px; color: var(--ink-dim); margin-top: 2px; letter-spacing: 0.05em; }
-.setup-header .ver-badge {
-  font-size: 9px; padding: 3px 7px;
-  background: var(--bg-2); border-radius: 999px;
-  color: var(--ink-mute); letter-spacing: 0.1em;
-}
-
-/* Karten */
-.card {
-  background: var(--bg-1);
-  border-radius: 18px;
-  padding: 16px 18px;
-}
-.card-h {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 10px; font-weight: 600;
-  color: var(--ink-dim);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-.card-h .step-num {
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: var(--bg-3);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; color: var(--ink); font-weight: 700;
-  letter-spacing: 0;
-  margin-right: 8px;
-}
-.card-h .step-num.done { background: var(--green); color: #000; }
-.card-h .step-num.now  { background: var(--accent); color: #000; }
 
 /* Buttons */
 .btn {
@@ -127,83 +80,13 @@ html, body {
 }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.btn.primary {
-  background: var(--accent); color: #000;
-}
+.btn.primary { background: var(--accent); color: #000; }
 .btn.primary:active:not(:disabled) { background: var(--accent-dk); }
-.btn.success { background: var(--ring-2); color: #000; }
-.btn.danger  { background: var(--red); color: #fff; }
 .btn.ghost   { background: transparent; border: 1px solid var(--line-2); color: var(--ink-dim); }
 
-.btn-row {
-  display: flex; gap: 8px;
-}
+.btn-row { display: flex; gap: 8px; }
 .btn-row .btn { flex: 1; }
 
-/* Status-Indikator (verbunden / getrennt) */
-.conn-status {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px;
-  background: var(--bg-2);
-  border-radius: 12px;
-  margin-bottom: 12px;
-}
-.conn-status .dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--ink-mute);
-}
-.conn-status.on .dot { background: var(--green); box-shadow: 0 0 10px var(--green); }
-.conn-status .label {
-  flex: 1;
-  font-size: 13px;
-}
-.conn-status .device-name {
-  color: var(--ink-dim); font-size: 11px; margin-top: 1px;
-}
-
-/* Pre-Workout-Sektion: Speed/Incline-Vorwahl */
-.preworkout-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.preworkout-card {
-  background: var(--bg-2);
-  border-radius: 14px;
-  padding: 12px;
-  text-align: center;
-}
-.preworkout-card .lbl {
-  font-size: 9px; color: var(--ink-dim);
-  letter-spacing: 0.2em; text-transform: uppercase;
-  margin-bottom: 4px; font-weight: 600;
-}
-.preworkout-card .vl {
-  font-size: 32px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-.preworkout-card .vl .un {
-  font-size: 13px; color: var(--ink-dim);
-  margin-left: 3px; font-weight: 400;
-}
-
-/* Footer-Aktionen */
-.setup-footer {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.setup-footer .btn-mini {
-  font-size: 11px; padding: 8px 12px;
-  color: var(--ink-mute); background: transparent;
-  text-align: center; cursor: pointer; border: none;
-}
-.setup-footer .btn-mini:hover { color: var(--ink-dim); }
-
-/* Kompakter Status-Text */
 .mini {
   font-size: 11px;
   color: var(--ink-mute);
@@ -212,16 +95,241 @@ html, body {
 }
 .mini b { color: var(--ink-dim); }
 
-/* Web-Bluetooth-Warnung */
-.ctx-warn {
-  background: rgba(255, 69, 58, 0.1);
-  border: 1px solid rgba(255, 69, 58, 0.3);
-  border-radius: 12px;
-  padding: 14px;
-  color: #ff9a93;
-  font-size: 12px;
-  line-height: 1.5;
+.ver-badge {
+  font-size: 9px; padding: 3px 7px;
+  background: var(--bg-2); border-radius: 999px;
+  color: var(--ink-mute); letter-spacing: 0.1em;
+  display: inline-block;
 }
+
+/* Web-Bluetooth-Warnung als kleiner Toast oben */
+.ctx-warn {
+  position: fixed;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: rgba(255, 69, 58, 0.95);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 80vw;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+/* =============================================================================
+   SIDE-MENÜ
+   ============================================================================= */
+.side-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+body.menu-open .side-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.side-menu {
+  position: fixed;
+  top: 0; left: 0;
+  width: 300px;
+  max-width: 80vw;
+  height: 100vh;
+  background: var(--bg-1);
+  border-right: 1px solid var(--line);
+  z-index: 51;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease-out;
+  padding: 18px;
+  padding-top: max(18px, env(safe-area-inset-top));
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+body.menu-open .side-menu {
+  transform: translateX(0);
+}
+
+.side-header {
+  margin-bottom: 6px;
+}
+.side-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.side-sub {
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+.side-conn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+}
+.side-conn .dot {
+  width: 10px; height: 10px;
+  background: var(--ink-mute);
+  border-radius: 50%;
+}
+.side-conn.on .dot {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+}
+.side-conn .info { flex: 1; }
+.side-conn .label { font-size: 13px; font-weight: 600; }
+.side-conn .device {
+  font-size: 11px; color: var(--ink-dim); margin-top: 1px;
+  font-family: "SF Mono", Menlo, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.side-btn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, border-color 0.15s;
+}
+.side-btn:active:not(:disabled) { transform: scale(0.98); }
+.side-btn:hover:not(:disabled) {
+  border-color: var(--line-2);
+  background: var(--bg-2);
+}
+.side-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.side-btn.primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.side-btn.primary:hover:not(:disabled) {
+  background: var(--accent-dk);
+  border-color: var(--accent-dk);
+}
+.side-btn.danger {
+  color: var(--red);
+  border-color: rgba(255, 69, 58, 0.4);
+}
+.side-btn.danger:hover:not(:disabled) {
+  background: rgba(255, 69, 58, 0.1);
+  border-color: var(--red);
+}
+
+.side-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 0;
+}
+
+.side-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  text-align: center;
+}
+
+/* =============================================================================
+   MODAL-DIALOGS
+   ============================================================================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 70;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal.open { display: flex; }
+.modal-card {
+  background: var(--bg-1);
+  border-radius: 18px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.modal-close:hover { color: var(--ink); background: var(--bg-2); }
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-section-h {
+  font-size: 10px; font-weight: 600;
+  color: var(--ink-dim);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 8px 0 8px;
+}
+
+/* Hamburger-Knopf im Workout */
+.hamburger {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--ink);
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.hamburger:active { transform: scale(0.94); }
+.hamburger:hover { border-color: var(--accent); color: var(--accent); }
 
 /* =============================================================================
    WORKOUT-VIEW (Querformat, beim Laufen)
@@ -232,6 +340,17 @@ html, body {
   position: fixed; top: 0; left: 0;
   background: var(--bg-0);
   z-index: 10;
+  /* Keine Animationen während Orientation-Wechsel,
+     verhindert das Layout-Flackern */
+  transition: none;
+}
+
+/* Während eines Orientation-Change verstecken wir die Workout-View komplett,
+   damit das System-Rotation und unsere CSS-Rotation nicht gleichzeitig
+   sichtbar werden — das vermeidet das "Flackern" beim Drehen. */
+body.rotating .view-workout.active,
+body.rotating #bigPanel {
+  visibility: hidden;
 }
 
 /* Workout-Bildschirm: erzwingt Querformat-Look auch im physischen Hochformat.
@@ -519,35 +638,15 @@ html, body {
 .bottom-actions button.exit   { flex: 0 0 44px; color: var(--ink-dim); font-size: 16px; }
 
 /* =============================================================================
-   SETTINGS-VIEW (Hochformat, Diagnose + Optionen)
+   STYLES FÜR MODAL-INHALTE
    ============================================================================= */
-.view-settings {
-  flex-direction: column;
-  max-width: 440px;
-  margin: 0 auto;
-  min-height: 100vh;
-  padding: 14px 18px 24px;
-  gap: 16px;
-}
-.settings-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 4px 0 8px;
-}
-.settings-header .back-btn {
-  background: var(--bg-2); border: none;
-  border-radius: 50%;
-  width: 36px; height: 36px;
-  font-size: 18px; color: var(--ink);
-  cursor: pointer; font-family: inherit;
-}
-.settings-header .title { font-size: 22px; font-weight: 700; }
 
 /* Diagnose-Log */
 #log {
   background: var(--bg-0);
   border: 1px solid var(--line);
   border-radius: 10px;
-  height: 320px;
+  height: 220px;
   overflow-y: auto;
   font-family: "SF Mono", Menlo, monospace;
   font-size: 10.5px;
@@ -758,58 +857,58 @@ body.bigscreen .ver-corner { display: none; }
   </div>
 </div>
 
-<!-- ===== SETUP-VIEW (Hochformat) ===== -->
-<div class="view view-setup active" id="viewSetup">
-  <div class="setup-header">
-    <div>
-      <div class="title">T6.5S</div>
-      <div class="sub">Workout-Steuerung via Bluetooth</div>
-    </div>
-    <div class="ver-badge">v2.7</div>
-  </div>
-
-  <div class="ctx-warn" id="ctxWarn" style="display:none">
-    <b>Web Bluetooth nicht verfügbar.</b><br>
-    Diese Seite muss über HTTPS aufgerufen werden und in einem unterstützten
-    Browser (Chrome, Edge auf Android/Desktop).
-  </div>
-
-  <!-- Schritt 1: Verbinden + automatisch Init + Workout-Wechsel -->
-  <div class="card">
-    <div class="card-h"><span class="step-num" id="stp1">1</span>VERBINDEN</div>
-    <div class="conn-status" id="connStatus">
-      <span class="dot"></span>
-      <div class="label">
-        <div id="connLabel">Getrennt</div>
-        <div class="device-name" id="connDevice">Bluetooth-Suche tippen</div>
-      </div>
-    </div>
-    <button class="btn primary" id="btnConnect">🔗 Verbinden &amp; Workout vorbereiten</button>
-    <div class="mini" style="margin-top:8px">
-      Verbindet mit dem Laufband, sendet die Init-Sequenz und wechselt automatisch
-      zum Workout-Bildschirm. Das Laufband wird dabei <b>nicht</b> gestartet.
-    </div>
-  </div>
-
-  <div class="setup-footer">
-    <button class="btn ghost" id="btnGoSettings">🔧 Diagnose / Einstellungen</button>
-    <button class="btn-mini" id="btnPreview">👁 Vorschau-Modus (Workout-Layout ohne Verbindung)</button>
-    <button class="btn-mini" id="btnAbout">App-Info</button>
-  </div>
+<!-- ===== Web-Bluetooth-Warnung (zeigt sich als Toast bei Bedarf) ===== -->
+<div class="ctx-warn" id="ctxWarn" style="display:none">
+  <b>Web Bluetooth nicht verfügbar.</b><br>
+  Diese Seite muss über HTTPS aufgerufen werden und in einem unterstützten
+  Browser (Chrome, Edge auf Android/Desktop).
 </div>
 
-<!-- ===== WORKOUT-VIEW (Querformat) ===== -->
-<div class="view view-workout" id="viewWorkout">
+<!-- ===== SIDE-MENÜ (von links einklappbar) ===== -->
+<div class="side-backdrop" id="sideBackdrop"></div>
+<aside class="side-menu" id="sideMenu">
+  <div class="side-header">
+    <div class="side-title">T6.5S</div>
+    <div class="side-sub">Workout-Steuerung</div>
+  </div>
+
+  <!-- Verbindungs-Status -->
+  <div class="side-conn" id="sideConn">
+    <span class="dot"></span>
+    <div class="info">
+      <div class="label" id="sideConnLabel">Nicht verbunden</div>
+      <div class="device" id="sideConnDevice">Tippe auf „Verbinden"</div>
+    </div>
+  </div>
+  <button class="side-btn primary" id="btnConnect">🔗 Verbinden</button>
+  <button class="side-btn danger" id="btnDisconnect" style="display:none">⏏ Trennen</button>
+
+  <div class="side-divider"></div>
+
+  <!-- Navigations-Einträge: öffnen jeweils einen Modal-Dialog -->
+  <button class="side-btn" data-modal="modalProfile">👤 Profil &amp; Gewicht</button>
+  <button class="side-btn" data-modal="modalCalib">📏 Strecken-Kalibrierung</button>
+  <button class="side-btn" data-modal="modalDiag">🔧 Diagnose &amp; Raw-Frame</button>
+  <button class="side-btn" data-modal="modalAbout">ℹ App-Info</button>
+
+  <div class="side-footer">
+    <span class="ver-badge">v3.0</span>
+  </div>
+</aside>
+
+<!-- ===== WORKOUT-VIEW (Default, immer aktiv) ===== -->
+<div class="view view-workout active" id="viewWorkout">
   <!-- Querformat-Inhalt -->
   <div class="workout-content">
     <!-- LINKS: Ringe -->
     <div class="w-left">
       <div class="w-topbar">
+        <button class="hamburger" id="btnHamburger" title="Menü öffnen">☰</button>
         <div class="device-block">
           <div class="device-name" id="wDeviceName">—</div>
           <div class="device-status" id="wStatus">
             <span class="dot"></span>
-            <span id="wStatusText">Getrennt</span>
+            <span id="wStatusText">Nicht verbunden</span>
           </div>
         </div>
       </div>
@@ -911,85 +1010,113 @@ body.bigscreen .ver-corner { display: none; }
         </div>
       </div>
       <div class="bottom-actions">
-        <button class="startstop" id="wStartStop">▶ Start</button>
+        <button class="startstop" id="wStartStop" disabled>▶ Start</button>
         <button class="exit" id="wBig" title="Vollbild-Modus">⛶</button>
-        <button class="disconnect" id="wDisconnect" title="Workout verlassen / trennen">⏻</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ===== SETTINGS-VIEW (Hochformat) ===== -->
-<div class="view view-settings" id="viewSettings">
-  <div class="settings-header">
-    <button class="back-btn" id="btnBackFromSettings">←</button>
-    <div class="title">Diagnose</div>
-  </div>
+<!-- ===== MODAL-DIALOGS (vom Side-Menü erreichbar) ===== -->
 
-  <div class="card">
-    <div class="card-h">👤 PROFIL</div>
-    <div class="mini" style="margin-bottom: 10px">
-      Dein Gewicht wird für die ACSM-Kalorienberechnung benötigt.
-      Wird lokal im Browser gespeichert.
+<!-- Modal: Profil -->
+<div class="modal" id="modalProfile">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">👤 Profil &amp; Gewicht</div>
+      <button class="modal-close" data-close="modalProfile">×</button>
     </div>
-    <div class="weight-row">
-      <button class="wbtn" id="wgtMinus">−</button>
-      <div class="wgt-display">
-        <input type="number" id="wgtInput" min="20" max="250" step="0.5">
-        <span class="wgt-unit">kg</span>
+    <div class="modal-body">
+      <div class="mini" style="margin-bottom: 12px">
+        Dein Gewicht wird für die ACSM-Kalorienberechnung benötigt.
+        Wird lokal im Browser gespeichert.
       </div>
-      <button class="wbtn" id="wgtPlus">+</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-h">PROTOKOLL-LOG</div>
-    <div id="log"></div>
-    <div class="btn-row" style="margin-top:8px">
-      <button class="btn ghost" id="btnClear">Log leeren</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-h">RAW-FRAME SENDEN</div>
-    <div class="raw-row">
-      <input id="rawHex" placeholder="z.B. fe 02 0c 02" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button class="btn" id="btnRaw" disabled style="flex:0 0 90px">Senden</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-h">📏 STRECKEN-KALIBRIERUNG</div>
-    <div class="mini" style="margin-bottom: 10px">
-      Zum Bestimmen des Counter→Meter-Faktors während eines Workouts: tippe
-      hier jedes Mal, wenn du den Konsolen-Strecken-Wert ablesen kannst.
-      Mindestens 3 Snapshots bei konstanter Geschwindigkeit sind ideal.
-    </div>
-    <button class="btn primary" id="btnCalibSnap" disabled>
-      📸 Snapshot speichern (App-Werte einfrieren)
-    </button>
-    <div id="calibList" style="margin-top: 12px"></div>
-    <div class="btn-row" style="margin-top: 8px">
-      <button class="btn ghost" id="btnCalibCopy" disabled style="flex:2">
-        📋 Liste kopieren
-      </button>
-      <button class="btn ghost" id="btnCalibClear" disabled>Leeren</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-h">PROTOKOLL-INFO</div>
-    <div class="mini">
-      Service: <b>00001533-1412-…-d123</b><br>
-      Write: <b>0x1534</b> · Notify: <b>0x1535</b><br>
-      Profil: <b>nordictrack_t65s_83_treadmill</b> (v83)<br>
-      Init: 26 Frames · Start: 13 Frames (iFIT)<br>
-      Telemetrie: 60 Bytes, Multi-Fragment-Reassembly
+      <div class="weight-row">
+        <button class="wbtn" id="wgtMinus">−</button>
+        <div class="wgt-display">
+          <input type="number" id="wgtInput" min="20" max="250" step="0.5">
+          <span class="wgt-unit">kg</span>
+        </div>
+        <button class="wbtn" id="wgtPlus">+</button>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="ver-corner">v2.7</div>
+<!-- Modal: Strecken-Kalibrierung -->
+<div class="modal" id="modalCalib">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">📏 Strecken-Kalibrierung</div>
+      <button class="modal-close" data-close="modalCalib">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="mini" style="margin-bottom: 10px">
+        Zum Bestimmen des Counter→Meter-Faktors während eines Workouts: tippe
+        hier jedes Mal, wenn du den Konsolen-Strecken-Wert ablesen kannst.
+        Mindestens 3 Snapshots bei konstanter Geschwindigkeit sind ideal.
+      </div>
+      <button class="btn primary" id="btnCalibSnap" disabled>
+        📸 Snapshot speichern (App-Werte einfrieren)
+      </button>
+      <div id="calibList" style="margin-top: 12px"></div>
+      <div class="btn-row" style="margin-top: 8px">
+        <button class="btn ghost" id="btnCalibCopy" disabled style="flex:2">
+          📋 Liste kopieren
+        </button>
+        <button class="btn ghost" id="btnCalibClear" disabled>Leeren</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Diagnose -->
+<div class="modal" id="modalDiag">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">🔧 Diagnose &amp; Raw-Frame</div>
+      <button class="modal-close" data-close="modalDiag">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section-h">PROTOKOLL-LOG</div>
+      <div id="log"></div>
+      <div class="btn-row" style="margin: 8px 0 16px">
+        <button class="btn ghost" id="btnClear">Log leeren</button>
+      </div>
+
+      <div class="modal-section-h">RAW-FRAME SENDEN</div>
+      <div class="raw-row">
+        <input id="rawHex" placeholder="z.B. fe 02 0c 02" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn" id="btnRaw" disabled style="flex:0 0 90px">Senden</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: App-Info -->
+<div class="modal" id="modalAbout">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">ℹ App-Info</div>
+      <button class="modal-close" data-close="modalAbout">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="mini" style="line-height: 1.6">
+        <b>T6.5S Workout v3.0</b><br>
+        Bluetooth-Steuerung für NordicTrack T6.5S<br><br>
+        <b>Protokoll-Info:</b><br>
+        Service: <b>00001533-1412-…-d123</b><br>
+        Write: <b>0x1534</b> · Notify: <b>0x1535</b><br>
+        Profil: <b>nordictrack_t65s_83_treadmill</b> (v83)<br>
+        Init: 26 Frames · Start: 13 Frames (iFIT)<br>
+        Telemetrie: 60 Bytes, Multi-Fragment-Reassembly
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ver-corner">v3.0</div>
 
 <script>
 "use strict";
@@ -1178,10 +1305,6 @@ const S = {
   fragBuf: null,
 
   busy: false,
-
-  // Vorschau-Modus: ermöglicht das Anzeigen aller Views/Layouts ohne
-  // tatsächliche BLE-Verbindung, mit Demo-Werten (für UI-Tests).
-  previewMode: false,
 
   // Nutzergewicht (kg) für Kalorien-Berechnung — wird aus localStorage geladen.
   userWeight: 75,
@@ -1439,10 +1562,6 @@ function onDisconnect() {
   stopPoll();
   cleanup();
   refreshUI();
-  // Wenn wir gerade im Workout sind, zurück zum Setup
-  if (document.getElementById("viewWorkout").classList.contains("active")) {
-    showView("Setup");
-  }
 }
 
 function cleanup() {
@@ -1756,14 +1875,8 @@ async function sendRaw() {
 // 7) UI v2.0 — View-System, Renderer, Event-Handler
 // =============================================================
 
-// View-Steuerung: welcher Bildschirm ist aktiv?
-function showView(name) {
-  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  const el = document.getElementById("view" + name);
-  if (el) el.classList.add("active");
-  // Workout-View aktiv → renderWorkoutView() initial
-  if (name === "Workout") renderWorkoutView();
-}
+// View-Steuerung: nur noch eine View (Workout), die immer aktiv ist.
+// Side-Menü und Modals werden via Klassen auf body/Elementen gesteuert.
 
 // Hilfsfunktion: gibt aktuell anzuzeigenden Speed/Incline zurück
 // (gleiche Hold-Logik wie früher, plus Live-Fallback)
@@ -1790,26 +1903,26 @@ function currentDisplayIncline() {
 }
 
 // =============================================================
-//  RENDERER für Setup-View
+//  RENDERER für Side-Menü (Verbindungs-Status, Buttons)
 // =============================================================
-function renderSetupView() {
-  const c = S.connected, i = S.inited;
-  // Conn-Status
-  const cs = $("connStatus");
+function renderSideMenu() {
+  const c = S.connected;
+  const cs = $("sideConn");
   if (c) {
     cs.classList.add("on");
-    $("connLabel").textContent  = "Verbunden";
-    $("connDevice").textContent = (S.device && S.device.name) ? S.device.name : "Gerät bereit";
+    $("sideConnLabel").textContent  = "Verbunden";
+    $("sideConnDevice").textContent = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
   } else {
     cs.classList.remove("on");
-    $("connLabel").textContent  = "Getrennt";
-    $("connDevice").textContent = "Bluetooth-Suche tippen";
+    $("sideConnLabel").textContent  = "Nicht verbunden";
+    $("sideConnDevice").textContent = "Tippe auf „Verbinden\"";
   }
-  // Buttons
-  $("btnConnect").disabled    = c || S.busy;
-  $("btnRaw").disabled        = !c;
-  // Step-Indikator
-  $("stp1").className = "step-num " + (c ? "done" : "now");
+  $("btnConnect").style.display    = c ? "none" : "";
+  $("btnDisconnect").style.display = c ? "" : "none";
+  $("btnConnect").disabled    = S.busy;
+  $("btnDisconnect").disabled = S.busy;
+  // Raw-Frame nur wenn verbunden
+  if ($("btnRaw")) $("btnRaw").disabled = !c;
 }
 
 // =============================================================
@@ -1832,9 +1945,9 @@ const COUNTER_TO_METERS = 1 / 5667;
 const RING_CIRC = { time: 603, speed: 465, dist: 327 };
 
 function renderWorkoutView() {
-  // Quick-Buttons + Stepper aktivieren/deaktivieren je nach Status.
-  // Im Vorschau-Modus sind alle aktiv (zur UI-Demo), sonst nur wenn ready.
-  const ready = (S.inited && S.connected) || S.previewMode;
+  // Quick-Buttons + Stepper aktivieren/deaktivieren je nach Verbindungsstatus.
+  // Wenn nicht verbunden, sind alle Steuerknöpfe ausgegraut (F3=A).
+  const ready = S.inited && S.connected;
   document.querySelectorAll("#wSpdQuick button, #wIncQuick button").forEach(b => b.disabled = !ready);
   $("wSpdMinus").disabled = $("wSpdPlus").disabled = !ready;
   $("wIncMinus").disabled = $("wIncPlus").disabled = !ready;
@@ -1847,17 +1960,13 @@ function renderWorkoutView() {
   // Geräte-Name + Status anzeigen
   if ($("wDeviceName")) {
     let name, statusText, statusClass;
-    if (S.previewMode) {
-      name = "Vorschau-Modus";
-      statusText = "Demo-Daten";
-      statusClass = "preview";
-    } else if (S.connected) {
+    if (S.connected) {
       name = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
       statusText = "Verbunden";
       statusClass = "on";
     } else {
       name = "—";
-      statusText = "Getrennt";
+      statusText = "Nicht verbunden";
       statusClass = "";
     }
     $("wDeviceName").textContent = name;
@@ -1885,12 +1994,12 @@ function renderWorkoutView() {
   $("wSpdSet").innerHTML = sp.v.toFixed(1) + '<span class="un">km/h</span>';
   $("wIncSet").innerHTML = inc.v.toFixed(1) + '<span class="un">%</span>';
   // Sekundäre Werte
-  $("wWatts").textContent       = S.istWatts === null   ? "—" : S.istWatts.toString();
-  $("wInclineDisp").textContent = (S.istIncline === null ? "—" : S.istIncline.toFixed(1)) + " %";
-  $("wKcal").textContent        = S.workoutKcal === null ? "—" : Math.round(S.workoutKcal).toString();
+  $("wWatts").textContent       = S.istWatts === null   ? "0" : S.istWatts.toString();
+  $("wInclineDisp").textContent = (S.istIncline === null ? "0.0" : S.istIncline.toFixed(1)) + " %";
+  $("wKcal").textContent        = S.workoutKcal === null ? "0" : Math.round(S.workoutKcal).toString();
 
   // Zeit
-  let timeTxt = "—";
+  let timeTxt = "0:00";
   if (S.workoutSeconds !== null) {
     const s = S.workoutSeconds;
     const mm = Math.floor(s/60), ss = s%60;
@@ -1899,7 +2008,7 @@ function renderWorkoutView() {
   $("wHeroTime").textContent = timeTxt;
 
   // Strecke: Roh-Counter → Meter (über Schätzfaktor)
-  let distTxt = "—";
+  let distTxt = "0 m";
   let distMeters = 0;
   if (S.workoutMeters !== null) {
     distMeters = S.workoutMeters * COUNTER_TO_METERS;
@@ -1941,7 +2050,8 @@ function renderWorkout() {
 }
 function refreshUI() {
   // Backend ruft das bei State-Änderungen auf
-  renderSetupView();
+  renderSideMenu();
+  renderWorkoutView();
 }
 
 // Stepper-Logik (gleiche wie v1.11)
@@ -2011,39 +2121,28 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 // =============================================================
-//  Connect + Init + automatischer Wechsel zur Workout-View
+//  Connect + Init + Side-Menü schließen
 // =============================================================
 async function connectAndPrepare() {
   await connect();
   if (!S.connected) return;     // Connect ist fehlgeschlagen
   await runInit();
   if (!S.inited) return;        // Init ist fehlgeschlagen
-  // Erfolgreich verbunden + initialisiert → direkt zur Workout-View
-  await goToWorkoutView();
-}
-
-async function goToWorkoutView() {
-  showView("Workout");
-  // Orientation Lock versuchen, wenn im Fullscreen
+  // Erfolgreich verbunden + initialisiert → Side-Menü schließen
+  closeSideMenu();
+  // Im PWA-Mode versuchen, Orientation auf Landscape zu locken
   try {
-    if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen();
-    }
     if (screen.orientation && screen.orientation.lock) {
       await screen.orientation.lock("landscape");
     }
-  } catch (e) { /* PWA kann das, Browser oft nicht — sonst egal */ }
+  } catch (e) { /* Manifest erzwingt's, sonst egal */ }
 }
 
 // Startet das Workout, falls noch nicht gestartet.
 // Wird sowohl vom Start-Knopf als auch von den Speed-Buttons aufgerufen.
 function ensureWorkoutStarted() {
   if (S.workoutStarted) return false;
-  if (!S.connected || !S.inited) {
-    // Im Vorschau-Modus: einfach Flag setzen
-    if (S.previewMode) { S.workoutStarted = true; return true; }
-    return false;
-  }
+  if (!S.connected || !S.inited) return false;
   startBelt();
   S.workoutStarted = true;
   return true;
@@ -2066,25 +2165,86 @@ function stopWorkout() {
   renderWorkoutView();
 }
 
-function exitWorkoutView() {
-  // Aus Fullscreen + Orientation Lock raus
-  if (screen.orientation && screen.orientation.unlock) {
-    try { screen.orientation.unlock(); } catch (e) {}
-  }
-  if (document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
-  }
-  showView("Setup");
+// =============================================================
+//  Side-Menü: öffnen/schließen + Edge-Swipe
+// =============================================================
+function openSideMenu()  { document.body.classList.add("menu-open"); renderSideMenu(); }
+function closeSideMenu() { document.body.classList.remove("menu-open"); }
+
+// Modal-Dialogs öffnen/schließen
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.add("open");
+  closeSideMenu();
+}
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.remove("open");
 }
 
 // =============================================================
 //  Event-Bindings
 // =============================================================
 $("btnConnect").onclick = connectAndPrepare;
+$("btnDisconnect").onclick = () => {
+  if (!confirm("Verbindung trennen?\n\nDas Laufband läuft weiter — zum Anhalten den roten Stop-Knopf am Laufband drücken.")) return;
+  disconnect();
+  closeSideMenu();
+};
 
-$("btnGoSettings").onclick = () => showView("Settings");
-$("btnBackFromSettings").onclick = () => showView("Setup");
-$("btnAbout").onclick = () => alert("T6.5S Workout v2.6\nBluetooth-Steuerung für NordicTrack T6.5S");
+// Side-Menü: Hamburger + Backdrop
+$("btnHamburger").onclick = openSideMenu;
+$("sideBackdrop").onclick = closeSideMenu;
+
+// Side-Menü-Einträge mit data-modal öffnen Modals
+document.querySelectorAll(".side-btn[data-modal]").forEach(btn => {
+  btn.onclick = () => openModal(btn.dataset.modal);
+});
+
+// Modal-Close-Buttons
+document.querySelectorAll(".modal-close[data-close]").forEach(btn => {
+  btn.onclick = () => closeModal(btn.dataset.close);
+});
+
+// Modal-Klick auf Hintergrund schließt das Modal
+document.querySelectorAll(".modal").forEach(m => {
+  m.addEventListener("click", (e) => {
+    if (e.target === m) m.classList.remove("open");
+  });
+});
+
+// Edge-Swipe von links → Side-Menü öffnen
+(function() {
+  let startX = 0, startY = 0, swiping = false;
+  document.body.addEventListener("touchstart", (e) => {
+    if (document.body.classList.contains("menu-open")) return;
+    const t = e.touches[0];
+    // Edge-Bereich: linke 20px der visuellen Querformat-Anzeige
+    // Im Landscape-Modus: links = niedrige X
+    // Im rotierten Portrait-Modus: visuelles links = niedrige Y (Touch-Koord physisch)
+    const isPortraitRotated = window.matchMedia("(orientation: portrait)").matches;
+    const edge = isPortraitRotated ? t.clientY : t.clientX;
+    if (edge < 24) {
+      startX = t.clientX;
+      startY = t.clientY;
+      swiping = true;
+    }
+  }, { passive: true });
+  document.body.addEventListener("touchmove", (e) => {
+    if (!swiping) return;
+    const t = e.touches[0];
+    const isPortraitRotated = window.matchMedia("(orientation: portrait)").matches;
+    // Swipe-Richtung: bei normaler Querformat-Anzeige nach rechts (X wächst),
+    // bei rotiertem Portrait nach unten (Y wächst)
+    const delta = isPortraitRotated ? (t.clientY - startY) : (t.clientX - startX);
+    if (delta > 60) {
+      swiping = false;
+      openSideMenu();
+    }
+  }, { passive: true });
+  document.body.addEventListener("touchend",   () => { swiping = false; }, { passive: true });
+  document.body.addEventListener("touchcancel",() => { swiping = false; }, { passive: true });
+})();
 
 $("btnRaw").onclick    = sendRaw;
 $("btnClear").onclick  = () => $("log").innerHTML = "";
@@ -2105,18 +2265,6 @@ $("wStartStop").onclick = () => {
   }
 };
 
-$("wDisconnect").onclick = () => {
-  if (S.previewMode) {
-    stopPreviewMode();
-    exitWorkoutView();
-    return;
-  }
-  if (S.connected) {
-    if (!confirm("Workout beenden und Verbindung trennen?\n\nDas Laufband läuft weiter — zum Anhalten den roten Stop-Knopf am Laufband drücken.")) return;
-    disconnect();
-  }
-  exitWorkoutView();
-};
 $("wBig").onclick = enterBigMode;
 
 // Schnelltasten im Workout-Bildschirm — starten Workout falls noch nicht gestartet
@@ -2135,69 +2283,6 @@ $("bigMinus").onclick   = () => stepSpeed(-SPEED_STEP);
 $("bigPlus").onclick    = () => stepSpeed(+SPEED_STEP);
 $("bigStart").onclick   = startBelt;
 $("bigExit").onclick    = exitBigMode;
-
-// =============================================================
-//  Vorschau-Modus für UI-Tests (keine echte Verbindung)
-// =============================================================
-let previewTimer = null;
-
-function startPreviewMode() {
-  S.previewMode = true;
-  S.workoutStarted = false;     // Vorschau startet ohne aktives Workout
-  // Initial-Werte: Bereit, aber noch nicht aktiv
-  S.istSpeed   = 0;
-  S.istIncline = 0;
-  S.istWatts   = 0;
-  S.workoutSeconds = 0;
-  S.workoutMeters  = 0;
-  S.workoutKcal    = 0;
-  S.lastKcalSec    = 0;
-  S.speed = S.incline = 0;
-  // Telemetrie simulieren — sekündlich
-  if (previewTimer) clearInterval(previewTimer);
-  previewTimer = setInterval(() => {
-    if (!S.previewMode) return;
-    // Vorschau-Live-Werte folgen den User-Eingaben (mit kleinem Wackeln)
-    const targetSpd = S.lastUserTargetSpeed !== null ? S.lastUserTargetSpeed
-                     : (S.workoutStarted ? 7.5 : 0);
-    const targetInc = S.lastUserTargetIncline !== null ? S.lastUserTargetIncline : 0;
-    S.istSpeed   = targetSpd > 0 ? targetSpd + (Math.random() - 0.5) * 0.06 : 0;
-    S.istIncline = targetInc;
-    S.istWatts   = Math.round(targetSpd * 12);   // grobe Demo-Schätzung
-
-    // Nur zählen wenn Workout aktiv ist (entspricht echtem Verhalten)
-    if (!S.workoutStarted || targetSpd < 0.5) {
-      renderWorkoutView();
-      renderBig();
-      return;
-    }
-    S.workoutSeconds++;
-    // Counter wächst mit Speed: 5667 Ticks pro Meter
-    const metersPerSec = S.istSpeed / 3.6;
-    S.workoutMeters += Math.round(metersPerSec * 5667);
-    // Kalorien akkumulieren (1 Sekunde Schritt)
-    const rate = calcKcalRate(S.istSpeed, S.istIncline, S.userWeight);
-    S.workoutKcal += rate / 60;
-    S.lastKcalSec = S.workoutSeconds;
-    renderWorkoutView();
-    renderBig();
-  }, 1000);
-
-  showView("Workout");
-  log("👁 Vorschau-Modus aktiv (keine echte Verbindung)", "l-sys");
-}
-function stopPreviewMode() {
-  S.previewMode = false;
-  S.workoutStarted = false;
-  if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
-  // State zurücksetzen
-  S.istSpeed = S.istIncline = S.istWatts = null;
-  S.workoutSeconds = S.workoutMeters = S.workoutKcal = S.lastKcalSec = null;
-  renderWorkoutView();
-  renderBig();
-}
-
-$("btnPreview").onclick = startPreviewMode;
 
 // =============================================================
 //  Strecken-Kalibrierung: Snapshots sammeln und exportieren
@@ -2314,6 +2399,25 @@ if ("serviceWorker" in navigator) {
       .then((reg) => console.log("Service Worker registriert:", reg.scope))
       .catch((err) => console.warn("Service Worker registration fehlgeschlagen:", err));
   });
+}
+
+// =============================================================
+//  Anti-Flicker für Orientation-Change
+//  Wenn das Handy zwischen Hoch- und Querformat gedreht wird,
+//  blenden wir den Workout-View kurz aus, damit das System-Rotations-
+//  Animation und unsere CSS-Rotation nicht gleichzeitig sichtbar werden.
+// =============================================================
+let rotateHideTimer = null;
+function hideForRotation() {
+  document.body.classList.add("rotating");
+  if (rotateHideTimer) clearTimeout(rotateHideTimer);
+  rotateHideTimer = setTimeout(() => {
+    document.body.classList.remove("rotating");
+  }, 350);  // typische Android-Rotation-Animation: 200-300ms
+}
+window.addEventListener("orientationchange", hideForRotation);
+if (screen.orientation && screen.orientation.addEventListener) {
+  screen.orientation.addEventListener("change", hideForRotation);
 }
 refreshUI();
 renderWorkoutView();
