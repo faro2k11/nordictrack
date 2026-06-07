@@ -5,7 +5,7 @@
 // Strategie: Cache-First für statische Assets, alle anderen Requests via Netz.
 // =============================================================================
 
-const CACHE_NAME = "t65s-v3.0.1";
+const CACHE_NAME = "t65s-v3.0.2";
 const PRECACHE_URLS = [
   "./",
   "./index.html",

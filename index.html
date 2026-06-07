@@ -1077,9 +1077,10 @@ body.bigscreen .ver-corner { display: none; }
     </div>
     <div class="modal-body">
       <div class="mini" style="margin-bottom: 10px">
-        Zum Bestimmen des Counter→Meter-Faktors während eines Workouts: tippe
-        hier jedes Mal, wenn du den Konsolen-Strecken-Wert ablesen kannst.
-        Mindestens 3 Snapshots bei konstanter Geschwindigkeit sind ideal.
+        Diagnose-Tool: vergleicht die per Speed×Zeit integrierte App-Strecke
+        mit dem Konsolen-Wert. Tippe während eines Workouts auf den Knopf,
+        wenn du den Konsolen-Strecken-Wert ablesen kannst.
+        Bei korrekter Integration sollten beide Werte eng zusammen liegen.
       </div>
       <button class="btn primary" id="btnCalibSnap" disabled>
         📸 Snapshot speichern (App-Werte einfrieren)
@@ -1322,7 +1323,19 @@ const S = {
   // aus iFIT 0x2f-Sniff). Distance/Kalorien sind Kandidaten-Felder, deren
   // genaue Einheit wir noch verifizieren.
   workoutSeconds: null,
+  // Workout-Strecke (kumulative Distanz in Metern, via Speed × Δt integriert,
+  // QZ-Style — siehe parseTelemetryPacket). Wird beim physischen Stop
+  // (Konsole-Zeit-Reset) zurückgesetzt.
   workoutMeters:  null,
+
+  // Roh-Counter aus byte 29-31 der Telemetrie. Wird NICHT für die
+  // Strecken-Berechnung benutzt (der Counter ist nicht streckenlinear),
+  // sondern nur für Diagnose und Kalibrierungs-Snapshots.
+  workoutCounter: null,
+
+  // Zeitstempel des letzten Telemetrie-Updates (ms). Wird für die
+  // Δt-Berechnung in der Strecken-Integration benutzt.
+  lastTelemetryTime: null,
   workoutKcal:    null,
 
   // Multi-Fragment-Buffer (ein Telemetrie-Paket kommt in 3 BLE-Notifications)
@@ -1506,12 +1519,44 @@ function parseTelemetryPacket(p) {
   // Bei state=0x03 (Pause/Stop) frieren die Werte ein — wie auf dem
   // Laufband-Display selbst.
   if (running) {
+    // ----- Strecken-Integration (QZ-Methode) -----
+    // Distance += Speed × Δt. Speed bevorzugt aus Ist-Geschwindigkeit
+    // (byte 37, motorseitig), fallback auf Soll-Geschwindigkeit (S.speed).
+    // Der Roh-Counter aus byte 29-31 ist nicht streckenlinear (er wächst
+    // überproportional mit Geschwindigkeit), deshalb verwenden wir ihn
+    // nicht für die Anzeige — nur für Diagnose-Zwecke.
+    const now = Date.now();
+    if (S.lastTelemetryTime !== null) {
+      const dtMs = now - S.lastTelemetryTime;
+      // Sanity: Δt zwischen 0 und 5s. Über 5s deutet auf Pause/Verbindungsabriss,
+      // dann nicht integrieren (würde sonst einen großen Sprung geben).
+      if (dtMs > 0 && dtMs < 5000) {
+        const useSpeed = (S.istSpeed !== null ? S.istSpeed : S.speed) || 0;
+        // km/h × ms / 3600 = Meter zurückgelegt in diesem Δt
+        const dMeters = useSpeed * dtMs / 3600;
+        S.workoutMeters = (S.workoutMeters || 0) + dMeters;
+      }
+    } else {
+      // Erstes Telemetrie-Tick im Workout: Distanz initial auf 0 setzen
+      // (vorher war sie null = "noch keine Daten").
+      if (S.workoutMeters === null) S.workoutMeters = 0;
+    }
+    S.lastTelemetryTime = now;
+
+    // Roh-Counter parallel für Diagnose mitschreiben
+    if (consoleCum !== null && consoleCum < 0xffffff) {
+      S.workoutCounter = consoleCum;
+    }
+
     if (consoleSec !== null && consoleSec < 28800) {
       // Reset-Erkennung: wenn die Konsole-Zeit rückwärts springt
-      // (= physischer Stop am Laufband), Kalorien ebenfalls resetten.
+      // (= physischer Stop am Laufband), Strecke + Kalorien zurücksetzen.
       if (S.workoutSeconds !== null && consoleSec < S.workoutSeconds) {
         S.workoutKcal = null;
         S.lastKcalSec = null;
+        S.workoutMeters = 0;
+        S.workoutCounter = 0;
+        S.lastTelemetryTime = now;   // Neu-Start der Δt-Messung
       }
       // Kalorien akkumulieren basierend auf vergangener Konsole-Zeit
       if (S.userWeight > 0 && S.istSpeed !== null) {
@@ -1525,9 +1570,10 @@ function parseTelemetryPacket(p) {
       }
       S.workoutSeconds = consoleSec;
     }
-    if (consoleCum !== null && consoleCum < 0xffffff) {
-      S.workoutMeters = consoleCum;
-    }
+  } else {
+    // Nicht laufend (Pause/Stop): Δt-Tracking pausieren, damit beim
+    // Wiederaufnehmen kein Sprung in die Distanz entsteht.
+    S.lastTelemetryTime = null;
   }
 
   // ACSM-Formel zur Berechnung der Kalorien-Verbrennung pro Minute.
@@ -1603,6 +1649,7 @@ function cleanup() {
   S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
   S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
   S.workoutStarted = false;
+  S.lastTelemetryTime = null;
   resetWorkout();
   renderValues(); renderIst(); renderWorkout();
 }
@@ -1613,11 +1660,13 @@ function cleanup() {
 //  nur die Anzeige-Werte zurück, falls die Verbindung getrennt wird.
 // =============================================================
 function resetWorkout() {
-  S.workoutSeconds = null;
-  S.workoutMeters  = null;
-  S.workoutKcal    = null;
-  S.lastKcalSec    = null;
-  S.fragBuf        = null;
+  S.workoutSeconds  = null;
+  S.workoutMeters   = null;
+  S.workoutCounter  = null;
+  S.workoutKcal     = null;
+  S.lastKcalSec     = null;
+  S.lastTelemetryTime = null;
+  S.fragBuf         = null;
 }
 
 async function disconnect() {
@@ -1936,10 +1985,15 @@ function currentDisplayIncline() {
 // =============================================================
 function renderSideMenu() {
   const c = S.connected;
+  const ready = c && S.inited;
   const cs = $("sideConn");
-  if (c) {
+  if (ready) {
     cs.classList.add("on");
     $("sideConnLabel").textContent  = "Verbunden";
+    $("sideConnDevice").textContent = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
+  } else if (c) {
+    cs.classList.remove("on");
+    $("sideConnLabel").textContent  = "Initialisiere…";
     $("sideConnDevice").textContent = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
   } else {
     cs.classList.remove("on");
@@ -1950,8 +2004,8 @@ function renderSideMenu() {
   $("btnDisconnect").style.display = c ? "" : "none";
   $("btnConnect").disabled    = S.busy;
   $("btnDisconnect").disabled = S.busy;
-  // Raw-Frame nur wenn verbunden
-  if ($("btnRaw")) $("btnRaw").disabled = !c;
+  // Raw-Frame nur wenn voll initialisiert
+  if ($("btnRaw")) $("btnRaw").disabled = !ready;
 }
 
 // =============================================================
@@ -1970,7 +2024,12 @@ const KCAL_RING_STEP   = 100;
 // Geschwindigkeit (6 km/h, je 100m Intervalle):
 //   - Lineare Regression → 5667 Ticks pro Meter (R² > 0.999)
 //   - Vorhersage-Genauigkeit: < 1.5 m Fehler über 1000 m
-const COUNTER_TO_METERS = 1 / 5667;
+// Anmerkung: Eine frühere Version nutzte einen festen Counter→Meter-Faktor
+// (1/5667 Ticks/m bei 6 km/h kalibriert). Das funktionierte nicht über den
+// gesamten Geschwindigkeitsbereich, weil der Roh-Counter nicht streckenlinear
+// ist (er wächst überproportional mit der Geschwindigkeit). Stattdessen
+// integriert die App jetzt die Strecke aus Speed × Zeit (siehe QZ-Vorbild
+// in proformtreadmill.cpp Zeile 3763).
 
 // Ring-Umfänge (2π × r): Speed r=96, Kcal r=74, Dist r=52
 const RING_CIRC = { speed: 603, kcal: 465, dist: 327 };
@@ -1989,12 +2048,18 @@ function renderWorkoutView() {
   if (snapBtn) snapBtn.disabled = (S.workoutMeters === null || S.workoutSeconds === null);
 
   // Geräte-Name + Status anzeigen
+  // "Verbunden" wird erst angezeigt, wenn auch die Init-Sequenz fertig ist.
+  // Während Connect-Phase oder Init-Phase: "Initialisiere…"
   if ($("wDeviceName")) {
     let name, statusText, statusClass;
-    if (S.connected) {
+    if (S.connected && S.inited) {
       name = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
       statusText = "Verbunden";
       statusClass = "on";
+    } else if (S.connected && !S.inited) {
+      name = (S.device && S.device.name) ? S.device.name : "(unbekannt)";
+      statusText = "Initialisiere…";
+      statusClass = "";
     } else {
       name = "—";
       statusText = "Nicht verbunden";
@@ -2038,11 +2103,11 @@ function renderWorkoutView() {
   }
   $("wHeroTime").textContent = timeTxt;
 
-  // Strecke: Roh-Counter → Meter (über Schätzfaktor)
+  // Strecke: jetzt direkt aus Speed×Zeit integriert (siehe parseTelemetryPacket)
   let distTxt = "0 m";
   let distMeters = 0;
   if (S.workoutMeters !== null) {
-    distMeters = S.workoutMeters * COUNTER_TO_METERS;
+    distMeters = S.workoutMeters;
     distTxt = distMeters < 1000
       ? `${distMeters.toFixed(0)} m`
       : `${(distMeters/1000).toFixed(2)} km`;
@@ -2053,7 +2118,8 @@ function renderWorkoutView() {
   //   - Außen:  Speed → progress = sp.v / 16
   //   - Mitte:  Kalorien → 100er-Zyklus mit alternierender Farbe (hell/dunkel)
   //   - Innen:  Distance pro Runde → progress = (meter % lapLength) / lapLength
-  //             In der Mitte wird die absolvierte Rundenzahl angezeigt.
+  //             In der Mitte wird die aktuelle Rundenzahl angezeigt (1-basiert,
+  //             d.h. man läuft immer "in" einer Runde, beginnend bei Runde 1).
   setRingProgress("ringSpeed", RING_CIRC.speed, sp.v / WORKOUT_MAX_SPD);
 
   const kcalTotal = S.workoutKcal || 0;
@@ -2063,7 +2129,7 @@ function renderWorkoutView() {
   // Farbe wechselt: gerade Zyklen hell, ungerade Zyklen dunkel
   $("ringKcal").setAttribute("stroke", kcalCycle % 2 === 0 ? "url(#g_kcal_l)" : "url(#g_kcal_d)");
 
-  const laps = S.lapLength > 0 ? Math.floor(distMeters / S.lapLength) : 0;
+  const laps = S.lapLength > 0 ? Math.floor(distMeters / S.lapLength) + 1 : 1;
   const inLap = S.lapLength > 0 ? (distMeters % S.lapLength) : 0;
   setRingProgress("ringDist", RING_CIRC.dist, inLap / S.lapLength);
   $("lapCount").textContent = laps.toString();
@@ -2341,8 +2407,8 @@ function snapCalib() {
   }
   const snap = {
     t:       S.workoutSeconds,
-    counter: S.workoutMeters,
-    appM:    S.workoutMeters * COUNTER_TO_METERS,
+    counter: S.workoutCounter || 0,    // Roh-Counter (für Diagnose)
+    appM:    S.workoutMeters,          // App-Strecke (Speed × Zeit integriert)
   };
   calibSnaps.push(snap);
   log(`📸 Snapshot #${calibSnaps.length}: t=${snap.t}s · counter=${snap.counter} · App=${snap.appM.toFixed(1)}m`, "l-ok");
