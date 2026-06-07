@@ -304,7 +304,29 @@ body.menu-open .side-menu {
   margin: 8px 0 8px;
 }
 
-/* Hamburger-Knopf im Workout */
+/* Kurzer Hinweis-Toast (Pause/Stop-Events vom Laufband) */
+.toast {
+  position: fixed;
+  top: 14px; left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  z-index: 80;
+  background: rgba(20, 20, 22, 0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 11px 20px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 .hamburger {
   background: transparent;
   border: 1px solid var(--line-2);
@@ -1355,6 +1377,13 @@ const S = {
   // Wird beim Drücken von Start gesetzt, beim Disconnect/Stop wieder false.
   workoutStarted: false,
 
+  // Workout-Phase aus Konsolen-Sicht (Byte 22 der Telemetrie):
+  //   "idle"     – noch nichts gelaufen
+  //   "running"  – Band läuft (state 0x02)
+  //   "paused"   – am Laufband pausiert (state 0x03, Zeit eingefroren)
+  //   "stopped"  – am Laufband gestoppt (state 0x03, Zeit auf 0 resettet)
+  workoutPhase: "idle",
+
   // Workout-Kalorien (kumulativ über das aktuelle Workout).
   // Werden bei jedem Telemetrie-Update sekündlich akkumuliert; resetten
   // wenn die Konsole-Workout-Zeit (byte 25) rückwärts springt.
@@ -1519,6 +1548,7 @@ function parseTelemetryPacket(p) {
   // Bei state=0x03 (Pause/Stop) frieren die Werte ein — wie auf dem
   // Laufband-Display selbst.
   if (running) {
+    S.workoutPhase = "running";
     // ----- Strecken-Integration (QZ-Methode) -----
     // Distance += Speed × Δt. Speed bevorzugt aus Ist-Geschwindigkeit
     // (byte 37, motorseitig), fallback auf Soll-Geschwindigkeit (S.speed).
@@ -1571,9 +1601,27 @@ function parseTelemetryPacket(p) {
       S.workoutSeconds = consoleSec;
     }
   } else {
-    // Nicht laufend (Pause/Stop): Δt-Tracking pausieren, damit beim
+    // Nicht laufend (state ≠ 0x02): Δt-Tracking pausieren, damit beim
     // Wiederaufnehmen kein Sprung in die Distanz entsteht.
     S.lastTelemetryTime = null;
+
+    if (state === 0x03) {
+      // Unterscheidung Pause vs. Stop anhand der Konsole-Zeit:
+      //   - STOP  : Zeit ist auf 0 / rückwärts gesprungen (Reset am Laufband)
+      //   - PAUSE : Zeit eingefroren beim letzten Wert
+      const timeReset = (consoleSec !== null && consoleSec === 0 &&
+                         S.workoutSeconds !== null && S.workoutSeconds > 0)
+                     || (consoleSec !== null && S.workoutSeconds !== null &&
+                         consoleSec < S.workoutSeconds);
+
+      if (timeReset) {
+        // Übergang zu "stopped" nur einmal behandeln
+        if (S.workoutPhase !== "stopped") onTreadmillStop();
+      } else if (S.workoutStarted || S.workoutPhase === "running") {
+        // Nur als Pause melden, wenn vorher tatsächlich gelaufen wurde
+        if (S.workoutPhase !== "paused") onTreadmillPause();
+      }
+    }
   }
 
   // ACSM-Formel zur Berechnung der Kalorien-Verbrennung pro Minute.
@@ -1649,6 +1697,7 @@ function cleanup() {
   S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
   S.lastUserTargetSpeedTime = S.lastUserTargetInclineTime = null;
   S.workoutStarted = false;
+  S.workoutPhase = "idle";
   S.lastTelemetryTime = null;
   resetWorkout();
   renderValues(); renderIst(); renderWorkout();
@@ -2075,6 +2124,9 @@ function renderWorkoutView() {
     if (S.workoutStarted) {
       $("wStartStop").innerHTML = "■ Stop";
       $("wStartStop").classList.add("running");
+    } else if (S.workoutPhase === "paused") {
+      $("wStartStop").innerHTML = "▶ Fortsetzen";
+      $("wStartStop").classList.remove("running");
     } else {
       $("wStartStop").innerHTML = "▶ Start";
       $("wStartStop").classList.remove("running");
@@ -2256,6 +2308,7 @@ function ensureWorkoutStarted() {
   if (!S.connected || !S.inited) return false;
   startBelt();
   S.workoutStarted = true;
+  S.workoutPhase = "running";
   return true;
 }
 
@@ -2274,6 +2327,50 @@ function stopWorkout() {
     alert("Die App hat die Geschwindigkeit auf 1.0 km/h reduziert.\n\nBitte am Laufband den roten Stop-Knopf drücken, um das Workout vollständig zu beenden.");
   }, 300);
   renderWorkoutView();
+}
+
+// =============================================================
+//  Reaktion auf physische Pause/Stop am Laufband
+//  (erkannt über Byte 22 + Konsolen-Zeit in parseTelemetryPacket)
+// =============================================================
+function onTreadmillStop() {
+  S.workoutPhase   = "stopped";
+  S.workoutStarted = false;
+  // Workout-Daten zurücksetzen (Konsole hat ebenfalls resettet)
+  S.workoutSeconds  = null;
+  S.workoutMeters   = null;
+  S.workoutCounter  = null;
+  S.workoutKcal     = null;
+  S.lastKcalSec     = null;
+  S.lastTelemetryTime = null;
+  S.lastUserTargetSpeed = S.lastUserTargetIncline = null;
+  log("⏹ Workout am Laufband gestoppt — Werte zurückgesetzt.", "l-sys");
+  showToast("⏹ Workout am Laufband beendet");
+  renderWorkoutView();
+}
+
+function onTreadmillPause() {
+  S.workoutPhase   = "paused";
+  S.workoutStarted = false;   // erlaubt Fortsetzen über den Start-Knopf
+  log("⏸ Workout am Laufband pausiert.", "l-sys");
+  showToast("⏸ Pausiert");
+  renderWorkoutView();
+}
+
+// Kurzer Hinweis-Toast oben mittig im Workout-Bildschirm
+let toastTimer = null;
+function showToast(msg) {
+  let t = document.getElementById("toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "toast";
+    t.className = "toast";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove("show"); }, 2600);
 }
 
 // =============================================================
